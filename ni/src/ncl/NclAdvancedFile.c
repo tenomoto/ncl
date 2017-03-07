@@ -8820,6 +8820,12 @@ static NhlErrorTypes AdvancedFileWriteGrp(NclFile infile, NclQuark grpname)
 {
     NclAdvancedFile thefile = (NclAdvancedFile) infile;
     NhlErrorTypes ret = NhlNOERROR;
+    NclFileGrpNode *grpnode = thefile->advancedfile.grpnode;
+    char *cp, *cp1, *cp2;
+    char *gname_all = NrmQuarkToString(grpname);
+    NrmQuark qgname;
+    char *lgname;
+    
 
   /*
    *fprintf(stderr, "\nEnter AdvancedFileWriteGrp, file: %s, line: %d\n", __FILE__, __LINE__);
@@ -8833,20 +8839,36 @@ static NhlErrorTypes AdvancedFileWriteGrp(NclFile infile, NclQuark grpname)
              NrmQuarkToString(thefile->advancedfile.fname)));
         return (NhlFATAL);
     }
-
-    if(thefile->advancedfile.format_funcs->add_grp != NULL)
-    {
-      /*
-       *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-       *fprintf(stderr, "\tgrpname: <%s>\n", NrmQuarkToString(grpname));
-       */
-        ret = (*thefile->advancedfile.format_funcs->add_grp)
-               ((void *)thefile->advancedfile.grpnode, grpname);
+    if (thefile->advancedfile.format_funcs->add_grp == NULL) {
+	    NHLPERROR((NhlFATAL,NhlEUNKNOWN,
+		       "AdvancedFileWriteGrp: file format does not support adding groups"));
+	    return (NhlFATAL);
     }
+	    
+    cp = strrchr(gname_all,'/');
+    if (! cp) {
+	    ret = (*thefile->advancedfile.format_funcs->add_grp)
+		    ((void *)thefile->advancedfile.grpnode, grpname);
+	    return ret;
+    }
+    qgname = NrmStringToQuark(cp + 1);
+    if (cp == gname_all) {
+	    ret = (*thefile->advancedfile.format_funcs->add_grp)
+		    ((void *)thefile->advancedfile.grpnode, qgname);
+	    return ret;
+    }
+/*
+    lgname = NclMalloc(strlen(gname_all + 1));
+    strcpy(lgname(gname_all));
+    cp1 = strchr(lgname,'/');
+    *cp1 = '\0';
+    cp1 += 1;
+    cp2 = cp1;
+    while (cp2 < cp) {
+	    cp2 = strchr(lgname,'/');
+	    *cp2 = '\0';
+*/    
     
-  /*
-   *fprintf(stderr, "Leave AdvancedFileWriteGrp, file: %s, line: %d\n\n", __FILE__, __LINE__);
-   */
     return ret;
 }
 
