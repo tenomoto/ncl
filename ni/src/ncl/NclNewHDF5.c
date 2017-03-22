@@ -3363,7 +3363,7 @@ herr_t _searchH5obj(char *name, const H5O_info_t *oinfo,
             {
                 grpnode->format = obj_type;
                 grpnode->name = NrmStringToQuark("/");
-                grpnode->pname = NrmStringToQuark("-");
+                grpnode->pname = -1;
                 grpnode->real_name = NrmStringToQuark("/");
 
               /*
@@ -3819,7 +3819,7 @@ static void *H5InitializeFileRec(NclFileFormat *format)
     grpnode->fid = -1;
     grpnode->pid = -1;
     grpnode->name = NrmStringToQuark("/");
-    grpnode->pname = NrmStringToQuark("-");
+    grpnode->pname = -1;
     grpnode->real_name = NrmStringToQuark("/");
     grpnode->path = -1;
     grpnode->extension = -1;

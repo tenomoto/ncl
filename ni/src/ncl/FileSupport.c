@@ -83,7 +83,7 @@ short    NCLuseAFS;
 
 NclQuark _NclVerifyFile(NclQuark the_path, NclQuark pre_file_ext_q, short *use_advanced_file_structure);
 
-void _printNclFileVarNode(FILE *fp, NclAdvancedFile thefile, NclFileVarNode *varnode);
+void _printNclFileVarNode(FILE *fp, NclAdvancedFile thefile, NclFileVarNode *varnode, int full);
 
 NhlErrorTypes _NclBuildOriginalFileCoordRSelection
 #if	NhlNeedProto
@@ -2453,7 +2453,7 @@ NhlErrorTypes _NclPrintAdvancedFileVarSummary(NclFile thefile, NclQuark varname)
 		return(NhlWARNING);	
 	}
 
-        _printNclFileVarNode(fp, advfile, varnode);
+        _printNclFileVarNode(fp, advfile, varnode,True);
 
 	return(NhlNOERROR);	
 }

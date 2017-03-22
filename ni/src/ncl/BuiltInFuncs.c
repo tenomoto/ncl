@@ -563,9 +563,20 @@ NclQuark *_NclGetAdvancedFileVarNames(void *therec, int *num_vars, int level)
     NclQuark *tmp_quarks = NULL;
     int n, nv;
     int i;
+    static char *top_group = NULL;
+    static NrmQuark qtop_group = NrmNULLQUARK;
+    char carr[2048];
 
     *num_vars = 0;
 
+    if (grpnode == NULL) 
+	    return NULL;
+
+    if (level == 0) {
+	    qtop_group = grpnode->real_name;
+	    top_group = NrmQuarkToString(qtop_group);
+    }
+	    
     if(NULL != grpnode->var_rec)
     {
         if(grpnode->var_rec->n_vars)
@@ -577,9 +588,20 @@ NclQuark *_NclGetAdvancedFileVarNames(void *therec, int *num_vars, int level)
 
             for(i = 0; i < grpnode->var_rec->n_vars; ++i)
             {
-                out_quarks[i] = (level == 0) ?
-                    grpnode->var_rec->var_node[i].name :
-                    grpnode->var_rec->var_node[i].real_name;
+		    if (level == 0) 
+			    out_quarks[i] = grpnode->var_rec->var_node[i].name;
+		    else if (qtop_group != NrmStringToQuark("/")) {
+			    int len = strlen(top_group);
+			    strcpy(carr, NrmQuarkToString(grpnode->var_rec->var_node[i].real_name));  
+			    if (strstr(carr,top_group) == carr) {
+				    if (carr[len] == '/')
+					    len += 1;
+				    out_quarks[i] = NrmStringToQuark(carr + len);
+			    }
+		    }
+		    else {
+			    out_quarks[i] =  grpnode->var_rec->var_node[i].real_name;
+		    }
             }
         }
     }
@@ -703,7 +725,7 @@ NhlErrorTypes _NclIGetFileVarNames
 		*tmp_str = ((NclTypeClass)nclTypestringClass)->type_class.default_mis.stringval;
 		dimsize = (ng_size_t)1;
 		data.kind = NclStk_VAL;
-		NhlPError(NhlWARNING,NhlEUNKNOWN,"getfilevarnames: %s contains no variables readable by NCL",
+		NhlPError(NhlINFO,NhlEUNKNOWN,"getfilevarnames: %s contains no variables readable by NCL",
 			  NrmQuarkToString(thefile->file.fname));
 		data.u.data_obj = _NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void*)tmp_str,
 						      &((NclTypeClass)nclTypestringClass)->type_class.default_mis,
@@ -17056,16 +17078,16 @@ NhlErrorTypes _NclIGetVarDims
 					ndims = 1;
 					if (grpnode->name == NrmStringToQuark("/")) {
 						if (grpnode->grp_rec && grpnode->grp_rec->n_grps > 0) {
-							NhlPError(NhlWARNING,NhlEUNKNOWN,"getvardims: root group in file %s contains no dimensions readable by NCL",
+							NhlPError(NhlINFO,NhlEUNKNOWN,"getvardims: root group in file %s contains no dimensions readable by NCL",
 								  NrmQuarkToString(theadvancedfile->advancedfile.fname));
 						}
 						else {
-							NhlPError(NhlWARNING,NhlEUNKNOWN,"getvardims: file %s contains no dimensions readable by NCL",
+							NhlPError(NhlINFO,NhlEUNKNOWN,"getvardims: file %s contains no dimensions readable by NCL",
 								  NrmQuarkToString(theadvancedfile->advancedfile.fname));
 						}
 					}
 					else {
-						NhlPError(NhlWARNING,NhlEUNKNOWN,"getvardims: group <%s> in file %s contains no dimensions readable by NCL",
+						NhlPError(NhlINFO,NhlEUNKNOWN,"getvardims: group <%s> in file %s contains no dimensions readable by NCL",
 							  NrmQuarkToString(grpnode->name),
 							  NrmQuarkToString(theadvancedfile->advancedfile.fname));
 					}
@@ -17086,7 +17108,7 @@ NhlErrorTypes _NclIGetVarDims
 				if (ndims == 0) {
 					names[0] = ((NclTypeClass)nclTypestringClass)->type_class.default_mis.stringval;
 					ndims = 1;
-					NhlPError(NhlWARNING,NhlEUNKNOWN,"getvardims: file %s contains no dimensions readable by NCL",
+					NhlPError(NhlINFO,NhlEUNKNOWN,"getvardims: file %s contains no dimensions readable by NCL",
 				  		NrmQuarkToString(thefile->file.fname));
 				}
 			}

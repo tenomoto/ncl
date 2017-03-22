@@ -922,7 +922,7 @@ void _printNclFileVarDimRecord(FILE *fp, NclFileDimRecord *dim_rec)
     _printStringConst(fp, " ]", TRUE);
 }
 
-void _printNclFileVarNode(FILE *fp, NclAdvancedFile thefile, NclFileVarNode *varnode)
+void _printNclFileVarNode(FILE *fp, NclAdvancedFile thefile, NclFileVarNode *varnode, int full)
 {
     NclFileDimRecord* dim_rec;
     NclFileDimNode* dimnode;
@@ -969,6 +969,11 @@ void _printNclFileVarNode(FILE *fp, NclAdvancedFile thefile, NclFileVarNode *var
 
     _printStringConstAligned(fp, "Variable: ", FALSE);
     _printNclTypeVal(fp, NCL_string, &(varnode->name), TRUE);
+
+    if (full && varnode->real_name != varnode->name) {
+	    _printStringConstAligned(fp, "Full path: ", FALSE);
+	    _printStringConst(fp, NrmQuarkToString(varnode->real_name), TRUE);
+    }
 
     _printStringConstAligned(fp, "Type: ", FALSE);
     _printStringConst(fp, type_str, TRUE);
@@ -1138,7 +1143,7 @@ void _printNclFileVarRecord(FILE *fp, NclAdvancedFile thefile, NclFileVarRecord 
     {
         varnode = &(varrec->var_node[i]);
 
-        _printNclFileVarNode(fp, thefile, varnode);
+        _printNclFileVarNode(fp, thefile, varnode, False);
     }
 
     _decreaseNclPrintIndentation();
@@ -2228,6 +2233,9 @@ NclFileVarNode *_getVarNodeFromNclFileGrpNode_asVar(NclFileGrpNode *grpnode,
     NclFileVarNode *varnode = NULL;
     NclFileGrpNode *tmpgrpnode = NULL;
 
+    if (! grpnode) {
+	    return NULL;
+    }
     if(NULL != grpnode->var_rec)
     {
         for(n = 0; n < grpnode->var_rec->n_vars; n++)
@@ -2270,6 +2278,8 @@ NclFileVarNode *_getVarNodeFromNclFileGrpNode_asCompound(NclFileGrpNode *grpnode
     char *struct_name = NULL;
     char *component_name = NULL;
 
+    if (grpnode == NULL) 
+	    return NULL;
     component_name = _getComponentName(NrmQuarkToString(varname), &struct_name);
     if(NULL != component_name)
     {
@@ -8823,10 +8833,10 @@ static NhlErrorTypes AdvancedFileWriteGrp(NclFile infile, NclQuark grpname)
     NclFileGrpNode *grpnode = thefile->advancedfile.grpnode;
     char *cp, *cp1, *cp2;
     char *gname_all = NrmQuarkToString(grpname);
-    NrmQuark qgname;
+    NrmQuark qgname, qpgrp_name;
     char *lgname;
+    NclFileGrpNode *pgroup;
     
-
   /*
    *fprintf(stderr, "\nEnter AdvancedFileWriteGrp, file: %s, line: %d\n", __FILE__, __LINE__);
    *fprintf(stderr, "\tgrpname: <%s>\n", NrmQuarkToString(grpname));
@@ -8848,26 +8858,35 @@ static NhlErrorTypes AdvancedFileWriteGrp(NclFile infile, NclQuark grpname)
     cp = strrchr(gname_all,'/');
     if (! cp) {
 	    ret = (*thefile->advancedfile.format_funcs->add_grp)
-		    ((void *)thefile->advancedfile.grpnode, grpname);
+		    ((void *)grpnode, grpname);
 	    return ret;
     }
     qgname = NrmStringToQuark(cp + 1);
     if (cp == gname_all) {
 	    ret = (*thefile->advancedfile.format_funcs->add_grp)
-		    ((void *)thefile->advancedfile.grpnode, qgname);
+		    ((void *)grpnode, qgname);
 	    return ret;
     }
-/*
+    /* The group to be added well be nested to some depth in an existing group.
+     * The parent group must exist before a child is added, so get the 
+     * existing group. First remove the new group from the name.
+     */
+       
     lgname = NclMalloc(strlen(gname_all + 1));
-    strcpy(lgname(gname_all));
-    cp1 = strchr(lgname,'/');
-    *cp1 = '\0';
-    cp1 += 1;
-    cp2 = cp1;
-    while (cp2 < cp) {
-	    cp2 = strchr(lgname,'/');
-	    *cp2 = '\0';
-*/    
+    strcpy(lgname,gname_all);
+    cp = strrchr(lgname,'/');
+    *cp = '\0';
+    qpgrp_name = NrmStringToQuark(lgname);
+    pgroup = _getGrpNodeFromNclFileGrpNode(grpnode,qpgrp_name);
+    if (pgroup != NULL) {
+	    ret = (*thefile->advancedfile.format_funcs->add_grp)
+		    ((void *)pgroup, qgname);
+    }
+    else {
+	    NHLPERROR((NhlWARNING,NhlEUNKNOWN,
+		       "AdvancedFileWriteGrp: group path (%s) not found"));
+	    ret = NhlWARNING;
+    }
     
     return ret;
 }
@@ -9126,68 +9145,78 @@ NclQuark *_NclGetGrpNames(void *therec, int *num_grps)
     NclFileGrpNode *tmpgrpnode = NULL;
     NclQuark *out_quarks = NULL;
     NclQuark *tmp_quarks = NULL;
-    char carr[2048];
+    char carr[2048],carr2[2048];
     int n, ng;
     int i;
+    char *cp;
+    char *top_group = NULL;
+    static NrmQuark qtop_group = NrmNULLQUARK;
+
 
     *num_grps = 0;
+    if (grpnode == NULL) 
+	    return NULL;
     if(NULL != grpnode->grp_rec)
     {
+	if (qtop_group == NULL) {
+		qtop_group = grpnode->real_name;
+	}
+	top_group = NrmQuarkToString(qtop_group);
         if(grpnode->grp_rec->n_grps)
         {
             *num_grps = grpnode->grp_rec->n_grps;
 
             out_quarks = (NclQuark *)NclCalloc(*num_grps, sizeof(NclQuark));
             assert(out_quarks);
+	    for(i = 0; i < grpnode->grp_rec->n_grps; ++i)
+	    {
+		    strcpy(carr, NrmQuarkToString(grpnode->grp_rec->grp_node[i]->real_name));
+		    n = strlen(carr) - 1;
+		    if (carr[n] == '/')
+			    carr[n] = '\0';
+		    
+		    /*
+		     *fprintf(stderr, "\nIn file: %s, line: %d\n", __FILE__, __LINE__);
+		     *fprintf(stderr, "\tori group No. %d: <%s>, strlen = %d\n", i, carr, n);
+		     */
+		    if (qtop_group != NrmStringToQuark("/")) {
+			    int len = strlen(top_group);
+			    if (strstr(carr,top_group) == carr) {
+				    if (carr[len] == '/')
+					    len += 1;
+				    out_quarks[i] = NrmStringToQuark(carr + len);
+			    }
+		    }
+		    else {
+			    out_quarks[i] = NrmStringToQuark(carr);
+		    }
+	    }
 
-            for(i = 0; i < grpnode->grp_rec->n_grps; ++i)
-            {
-#if 1
-                strcpy(carr, NrmQuarkToString(grpnode->grp_rec->grp_node[i]->real_name));
-                n = strlen(carr) - 1;
-              /*
-               *fprintf(stderr, "\nIn file: %s, line: %d\n", __FILE__, __LINE__);
-               *fprintf(stderr, "\tori group No. %d: <%s>, strlen = %d\n", i, carr, n);
-               */
-                if(carr[n] == '/')
-                {
-                    carr[n] = '\0';
-                  /*
-                   *fprintf(stderr, "\tnew group No. %d: <%s>, strlen = %d\n", i, carr, n);
-                   */
-                    out_quarks[i] = NrmStringToQuark(carr);
-                }
-                else
-                    out_quarks[i] = grpnode->grp_rec->grp_node[i]->real_name;
-#else
-                out_quarks[i] = grpnode->grp_rec->grp_node[i]->name;
-#endif
-            }
+	    for(n = 0; n < grpnode->grp_rec->n_grps; ++n)
+	    {
+		    tmpgrpnode = grpnode->grp_rec->grp_node[n];
 
-            for(n = 0; n < grpnode->grp_rec->n_grps; ++n)
-            {
-                tmpgrpnode = grpnode->grp_rec->grp_node[n];
+		    tmp_quarks = _NclGetGrpNames((void *)tmpgrpnode, &ng);
 
-                tmp_quarks = _NclGetGrpNames((void *)tmpgrpnode, &ng);
+		    if(ng)
+		    {
+			    out_quarks = (NclQuark *)NclRealloc(out_quarks,
+								(*num_grps + ng) * sizeof(NclQuark));
+			    assert(out_quarks);
 
-                if(ng)
-                {
-                    out_quarks = (NclQuark *)NclRealloc(out_quarks,
-                                                (*num_grps + ng) * sizeof(NclQuark));
-                    assert(out_quarks);
+			    for(i = 0; i < ng; ++i)
+			    {
+				    out_quarks[*num_grps + i] = tmp_quarks[i];
+			    }
+			    NclFree(tmp_quarks);
 
-                    for(i = 0; i < ng; ++i)
-                    {
-                        out_quarks[*num_grps + i] = tmp_quarks[i];
-                    }
-                    NclFree(tmp_quarks);
-
-                    *num_grps += ng;
-                }
-            }
+			    *num_grps += ng;
+		    }
+	    }
         }
     }
-
+    if (qtop_group == grpnode->real_name)
+	    qtop_group = NrmNULLQUARK;
     return(out_quarks);
 }
 
