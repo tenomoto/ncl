@@ -3,6 +3,8 @@
 /* NclGetGrpAttNamesFunc   get_grp_att_names; */        NULL, 
 /* NclGetGrpAttInfoFunc    get_grp_att_info; */         NULL,
 /* NclAddGrpFunc           add_grp; */                  NULL,
+/* NclGetUDTNamesFunc      get_udt_names */             NULL,
+/* NclUserTypesEqual       user_types_equal */          NULL,
 /* NclAddVlenFunc          add_vlen; */                 NULL,
 /* NclAddEnumFunc          add_enum; */                 NULL,
 /* NclAddOpaqueFunc        add_opaque; */               NULL,

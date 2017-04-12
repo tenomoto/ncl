@@ -722,3 +722,48 @@ void _NclCopyOption(NCLOptions *option, NclQuark name,
     memcpy(option->values, values, nsz);
 }
 
+NrmQuark *_NclAdvancedGetUserTypeNames(NclFileGrpNode * grpnode, int *num_types, int level)
+{
+	NclFileGrpNode *pgrpnode;
+	NrmQuark *udt_names = NULL;
+	NrmQuark *tmp_udt_names = NULL;
+	int i;
+	int n_types = 0, tmp_n_types = 0;
+	
+
+	/* since UDTs in HDF5 and NetCDF4 files are accessible and usable within any
+	   group in the file, this routine returns the paths of all UTDs no matter
+	   which group in the file is the caller */
+	
+	pgrpnode = grpnode;
+	if (level == 0) {
+		while (pgrpnode->parent != NULL) {
+			pgrpnode = pgrpnode->parent;
+		}
+	}
+	if (pgrpnode->udt_rec != NULL) {
+		udt_names = NclMalloc( pgrpnode->udt_rec->n_udts * sizeof(NrmQuark));
+		for (i = 0; i < pgrpnode->udt_rec->n_udts; i++) {
+			udt_names[i] = pgrpnode->udt_rec->udt_node[i].name;
+		}
+		n_types = pgrpnode->udt_rec->n_udts;
+	}
+	if (pgrpnode->grp_rec && pgrpnode->grp_rec->n_grps) {
+		level++;
+		for (i = 0; i < pgrpnode->grp_rec->n_grps; i++) {
+			tmp_udt_names = _NclAdvancedGetUserTypeNames(pgrpnode->grp_rec->grp_node[i],&tmp_n_types,level);
+			if (tmp_n_types) {
+				if (udt_names == NULL) {
+					udt_names = tmp_udt_names;
+				}
+				else {
+					udt_names = NclRealloc(udt_names, sizeof(NrmQuark) * (n_types + tmp_n_types));
+					memcpy(&(udt_names[n_types]),tmp_udt_names,tmp_n_types * sizeof(NrmQuark));
+				}
+				n_types += tmp_n_types;
+			}
+		}
+	}
+	*num_types = n_types;
+	return udt_names;
+}

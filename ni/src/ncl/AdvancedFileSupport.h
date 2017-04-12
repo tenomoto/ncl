@@ -107,5 +107,8 @@ void *GetCachedValue(NclFileVarNode *varnode,
 void _NclCopyGroupOptions(NclFileGrpNode *grpnode, NclFileGrpNode *rootgrpnode);
 void _NclCopyOption(NCLOptions *option, NclQuark name,
                     NclBasicDataTypes data_type, int n_items, void *values);
+
+NrmQuark *_NclAdvancedGetUserTypeNames(NclFileGrpNode *grpnode, int *num_types, int level);
+
 #endif
 

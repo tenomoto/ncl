@@ -5741,6 +5741,9 @@ NclFormatFunctionRec HDF5Rec = {
 /* NclGetGrpInfoFunc        get_grp_info; */       HDF5GetGrpInfo,
 /* NclGetGrpAttNamesFunc    get_grp_att_names; */  HDF5GetGrpAttNames,
 /* NclGetGrpAttInfoFunc     get_grp_att_info; */   HDF5GetGrpAttInfo,
+/* NclGetUDTNamesFunc      get_udt_names */              NULL,
+/* NclUserTypesEqual       user_types_equal */          NULL,
+/* NclAddGrpFunc           add_grp; */                  NULL,
 /* NclAddGrpFunc           add_grp; */                  NULL,
 /* NclSetOptionFunc         set_option;  */        HDF5SetOption
 };

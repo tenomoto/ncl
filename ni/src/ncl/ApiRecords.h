@@ -1,3 +1,5 @@
+#ifndef _ApiRecords_h
+#define _ApiRecords_h
 
 typedef struct _NclApiDataList NclApiDataList;
 typedef struct _NclApiFuncInfoRec NclApiFuncInfoRec;
@@ -86,3 +88,4 @@ struct _NclApiFileInfoRec {
 };
 
 
+#endif

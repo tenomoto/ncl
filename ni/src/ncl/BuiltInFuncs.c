@@ -66,6 +66,7 @@ extern "C" {
 #include "TypeSupport.h"
 #include "NclBuiltInSupport.h"
 #include "FileSupport.h"
+#include "AdvancedFileSupport.h"
 #include "NclAtt.h"
 #include "NclList.h"
 #include "ListSupport.h"
@@ -801,6 +802,102 @@ NhlErrorTypes _NclIGetFileGrpNames
 	dimsize = (ng_size_t)num_vars;
 	data.kind = NclStk_VAL;
 	data.u.data_obj = _NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void*)grp_names,NULL,1,&dimsize,TEMPORARY,NULL,(NclTypeClass)nclTypestringClass);
+	_NclPlaceReturn(data);
+       	return(NhlNOERROR);
+}
+
+NhlErrorTypes _NclIGetFileUserTypeNames
+#if	NhlNeedProto
+(void)
+#else
+()
+#endif
+{
+	NclStackEntry data;
+	NclQuark *type_names = NULL;
+	NclQuark file_q;
+	ng_size_t dimsize = 0;
+	int num_types = 0;
+	NclFile thefile = NULL;
+	NclMultiDValData tmp_md = NULL;
+	NclFileGrpNode *grpnode;
+
+	data = _NclGetArg(0,1,DONT_CARE);
+	switch(data.kind) {
+	case NclStk_VAR:
+		file_q = data.u.data_var->var.var_quark;
+		break;
+	case NclStk_VAL:
+		file_q = -1;
+		tmp_md = data.u.data_obj;
+		break;
+	default:
+		return(NhlFATAL);
+	}
+	if(file_q == -1)
+	{
+		if(tmp_md==NULL) 
+			tmp_md = _NclVarValueRead(data.u.data_var,NULL,NULL);
+		thefile = (NclFile)_NclGetObj(*(int*)tmp_md->multidval.val);
+	}
+	else
+	{
+		NclSymbol *s = NULL;
+		NclStackEntry *thevar = NULL;
+		NclMultiDValData theid = NULL;
+
+		s = _NclLookUp(NrmQuarkToString(file_q));
+		if((s != NULL)&&(s->type != UNDEF))
+		{
+			thevar = _NclRetrieveRec(s,DONT_CARE);
+			if(thevar->kind == NclStk_VAR)
+			{
+				theid = _NclVarValueRead(thevar->u.data_var,NULL,NULL);
+				if(theid->obj.obj_type_mask & Ncl_MultiDValnclfileData)
+				{
+					thefile = (NclFile)_NclGetObj(*(int*)theid->multidval.val);
+				}
+			}
+		}
+	}
+        
+        if (thefile == NULL || ! thefile->file.advanced_file_structure) {
+		NclQuark *tmp_str =(NclQuark*) NclMalloc(((NclTypeClass)nclTypestringClass)->type_class.size);
+		*tmp_str = ((NclTypeClass)nclTypestringClass)->type_class.default_mis.stringval;
+		dimsize = (ng_size_t)1;
+		data.kind = NclStk_VAL;
+		if (thefile == NULL)
+			NhlPError(NhlWARNING,NhlEUNKNOWN,"getfileusertypenames: %s is not a valid file variable",
+				  NrmQuarkToString(file_q));
+		else
+			NhlPError(NhlWARNING,NhlEUNKNOWN,"getfileusertypenames: the format of %s does not allow for user-defined types",
+				  NrmQuarkToString(file_q));
+		data.u.data_obj = _NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void*)tmp_str,
+						      &((NclTypeClass)nclTypestringClass)->type_class.default_mis,
+						      1,&dimsize,TEMPORARY,NULL,(NclTypeClass)nclTypestringClass);
+		_NclPlaceReturn(data);
+		return(NhlWARNING);            
+        }
+
+	type_names = _NclAdvancedGetUserTypeNames(((NclAdvancedFile)thefile)->advancedfile.grpnode, &num_types,0);
+
+	if (NULL == type_names || num_types == 0) {
+		NclQuark *tmp_str =(NclQuark*) NclMalloc(((NclTypeClass)nclTypestringClass)->type_class.size);
+		*tmp_str = ((NclTypeClass)nclTypestringClass)->type_class.default_mis.stringval;
+		dimsize = (ng_size_t)1;
+		data.kind = NclStk_VAL;
+		NhlPError(NhlINFO,NhlEUNKNOWN,"getfileusertypenames: %s contains no user-defined types",
+			  NrmQuarkToString(thefile->file.fname));
+		data.u.data_obj = _NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void*)tmp_str,
+						      &((NclTypeClass)nclTypestringClass)->type_class.default_mis,
+						      1,&dimsize,TEMPORARY,NULL,(NclTypeClass)nclTypestringClass);
+		_NclPlaceReturn(data);
+		return(NhlWARNING);
+	}
+	dimsize = (ng_size_t)num_types;
+	data.kind = NclStk_VAL;
+	data.u.data_obj = _NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void*)type_names,NULL,1,&dimsize,
+					      TEMPORARY,NULL,(NclTypeClass)nclTypestringClass);
 	_NclPlaceReturn(data);
        	return(NhlNOERROR);
 }
@@ -17026,7 +17123,7 @@ NhlErrorTypes _NclIgaus
 
 
 NhlErrorTypes _NclIGetVarDims
-#if	NhlNeedProto
+#if	NhlNeedProton
 (void)
 #else
 ()
@@ -18002,7 +18099,7 @@ NhlErrorTypes _NclIFileCompoundDef(void)
 
         for(n = 0; n < n_mems; n++)
         {
-            if((NclQuark)mem_name[n] == missing.stringval)
+            if((NclQuark)mem_name[n] == mem_missing.stringval)
                 num_missing++;
         }
 
@@ -18023,6 +18120,11 @@ NhlErrorTypes _NclIFileCompoundDef(void)
                         &type_has_missing,
                         NULL,
                         0);
+    if (n_types != n_mems) {
+            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+                "_NclIFileCompoundDef: number of types must equal number of members.\n"));
+            return(NhlFATAL);
+    }
 
     if(type_has_missing)
     {
@@ -18030,7 +18132,7 @@ NhlErrorTypes _NclIFileCompoundDef(void)
 
         for(n = 0; n < n_types; n++)
         {
-            if((NclQuark)mem_type[n] == missing.stringval)
+            if((NclQuark)mem_type[n] == type_missing.stringval)
                 num_missing++;
         }
 
@@ -18052,13 +18154,19 @@ NhlErrorTypes _NclIFileCompoundDef(void)
                         NULL,
                         0);
 
+    if (n_sizes != n_mems) {
+            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+                "_NclIFileCompoundDef: number of type sizes must equal number of members.\n"));
+            return(NhlFATAL);
+    }
+
     if(size_has_missing)
     {
         num_missing = 0;
 
         for(n = 0; n < n_sizes; n++)
         {
-            if((NclQuark)mem_size[n] == missing.intval)
+            if((NclQuark)mem_size[n] == size_missing.intval)
                 num_missing++;
         }
 

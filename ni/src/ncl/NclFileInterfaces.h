@@ -533,6 +533,22 @@ NclQuark  /* Atribute name */
 #endif
 );
 
+typedef NrmQuark *(*NclGetUDTNamesFunc) (
+#if	NhlNeedProto
+void *,
+int *n_names
+#endif
+);
+
+typedef NrmQuark *(*NclUserTypesEqual) (
+#if	NhlNeedProto
+void *grp1,
+NrmQuark type_name1,
+void *grp2,
+NrmQuark type_name2
+#endif
+);
+
 struct _NclFormatFunctionRecord {
 NclInitializeFileRecFunc	initialize_file_rec;
 NclCreateFileFunc	create_file;
@@ -577,6 +593,8 @@ NclGetGrpNamesFunc	get_grp_names;
 NclGetGrpInfoFunc       get_grp_info;
 NclGetGrpAttNamesFunc   get_grp_att_names;
 NclGetGrpAttInfoFunc    get_grp_att_info;
+NclGetUDTNamesFunc      get_udt_names;
+NclUserTypesEqual       user_types_equal;
 NclAddGrpFunc		add_grp;
 NclAddVlenFunc		add_vlen;
 NclAddEnumFunc		add_enum;

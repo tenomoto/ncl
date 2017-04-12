@@ -8558,6 +8558,8 @@ NclFormatFunctionRec H5Rec =
     /* NclGetGrpInfoFunc       get_grp_info; */              NULL,
     /* NclGetGrpAttNamesFunc   get_grp_att_names; */         NULL,
     /* NclGetGrpAttInfoFunc    get_grp_att_info; */          NULL,
+    /* NclGetUDTNamesFunc      get_udt_names */              NULL,
+    /* NclUserTypesEqual       user_types_equal */           NULL,
     /* NclAddGrpFunc           add_grp; */                   H5AddGrp,
     /* NclAddVlenFunc          add_vlen; */                  H5AddVlen,
     /* NclAddEnumFunc          add_enum; */                  H5AddEnum,

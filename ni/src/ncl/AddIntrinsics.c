@@ -139,6 +139,9 @@ void
 
 extern NhlErrorTypes _NclIGetFileGrpNames(void);
 
+extern NhlErrorTypes _NclIGetFileUserTypeNames(void);
+
+
 extern NhlErrorTypes _NclIListVariables(
 #if	NhlNeedProto
 void
@@ -540,6 +543,13 @@ void _NclAddIntrinsics
 	args[0].dim_sizes[0] = 1;
 	args[0].n_dims = 1;
 	_NclRegisterFunc(_NclIGetFileGrpNames,args,"getfilegrpnames",1,IFUNC);
+
+	args = NclCalloc(1,sizeof(NclArgTemplate));
+	args[0].arg_data_type = _NclLookUp("file");
+	args[0].is_dimsizes = 1;
+	args[0].dim_sizes[0] = 1;
+	args[0].n_dims = 1;
+	_NclRegisterFunc(_NclIGetFileUserTypeNames,args,"getfileusertypenames",1,IFUNC);
 
 	args = NclCalloc(1,sizeof(NclArgTemplate));
 	args[0].arg_data_type = _NclLookUp("numeric");

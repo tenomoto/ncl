@@ -2036,7 +2036,18 @@ NclFileUDTRecord *_NC4_get_udts(int gid, int uid, int n_udts)
 		     udtnode->fields[n].field_name = NrmStringToQuark(buffer);
 		     udtnode->fields[n].field_type =  NC4MapToNcl(&ftype);
 		     udtnode->fields[n].offset = offset;
+
 		     nc_inq_compound_fieldndims(gid,typeids[i],n,&ndims);
+/*
+
+		     if (ndims > 0) {
+			     dim_sizes = NclMalloc(sizeof(int) * ndims);
+			     nc_inq_compound_fielddim_sizes(gid,typeids[i],n,dim_sizes);
+			     NclFree(dim_sizes);
+		     }
+
+*/
+			     
 		     if (ndims == 0) {
 			     udtnode->fields[n].n_dims = 0;
 			     udtnode->fields[n].dim_sizes = NULL;
@@ -2049,6 +2060,7 @@ NclFileUDTRecord *_NC4_get_udts(int gid, int uid, int n_udts)
 			     for (i = 0; i < ndims; i++) {
 				     udtnode->fields[n].dim_sizes[i] = (ng_size_t) dim_sizes[i];
 			     }
+			     NclFree(dim_sizes);
 		     }
 
                    /*
@@ -2157,6 +2169,7 @@ void _NC4_get_grpnode(int pid, int gid, NclQuark pn, NclFileGrpNode *parentgrpno
     int numgrps = 0;
     int unlimited_dim_idx = 0;
     int has_scalar_dim = 0;
+    int ntypes;
     char *pgn;
     char buffer[NC_MAX_NAME + 1];
     char group_name[NC_MAX_NAME + 1];
@@ -2244,6 +2257,10 @@ void _NC4_get_grpnode(int pid, int gid, NclQuark pn, NclFileGrpNode *parentgrpno
     grpnode->parent = NULL;
 #endif
 
+    nc_ret = nc_inq_typeids(gid,&ntypes,NULL);
+    if (ntypes) {
+	    grpnode->udt_rec = _NC4_get_udts(gid, NC_GLOBAL, ntypes);
+    }
     nc_ret = ncinquire(gid, &n_dims, &n_vars, &n_atts, &unlimited_dim_idx);
 
   /*
@@ -7132,6 +7149,8 @@ NclFormatFunctionRec NC4Rec =
     /* NclGetGrpInfoFunc       get_grp_info; */              NULL,
     /* NclGetGrpAttNamesFunc   get_grp_att_names; */         NULL, 
     /* NclGetGrpAttInfoFunc    get_grp_att_info; */          NULL,
+    /* NclGetUDTNamesFunc      get_udt_names */              NULL,
+    /* NclUserTypesEqual       user_types_equal */           NULL,
     /* NclAddGrpFunc           add_grp; */                   NC4AddGrp,
     /* NclAddVlenFunc          add_vlen; */                  NC4AddVlen,
     /* NclAddEnumFunc          add_enum; */                  NC4AddEnum,
