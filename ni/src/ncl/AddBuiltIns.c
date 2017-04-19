@@ -138,6 +138,7 @@ extern NhlErrorTypes _NclIFileCompoundDef(void);
 extern NhlErrorTypes _NclIFileWriteCompound(void);
 extern NhlErrorTypes _NclIFileOpaqueDef(void);
 extern NhlErrorTypes _NclIFileGrpDef(void);
+extern NhlErrorTypes _NclIFileCompoundTypeDef(void);
 
 extern NhlErrorTypes _NclIFileVarDef(
 #if NhlNeedProto
