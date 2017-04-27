@@ -294,7 +294,7 @@ extern NhlErrorTypes _NclFileAddOpaque(NclFile thefile, NclQuark vlen_name, NclQ
                                        int var_size, NclQuark dim_name);
 extern NhlErrorTypes _NclFileAddCompound(NclFile thefile, NclQuark compound_name, NclQuark var_name,
                                          ng_size_t n_dims, NclQuark *dim_name, ng_size_t n_mems,
-                                         NclQuark *mem_name, NclQuark *mem_type, int *mem_size);
+                                         NclQuark *mem_name, NclQuark *mem_type, NclList size_list);
 extern NhlErrorTypes _NclFileWriteCompound(NclFile thefile, NclQuark compound_name, NclQuark var_name,
                                            ng_size_t n_mems, NclQuark *mem_name, NclObj listobj);
 

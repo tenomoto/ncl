@@ -820,7 +820,6 @@ NhlErrorTypes _NclIGetFileUserTypeNames
 	int num_types = 0;
 	NclFile thefile = NULL;
 	NclMultiDValData tmp_md = NULL;
-	NclFileGrpNode *grpnode;
 
 	data = _NclGetArg(0,1,DONT_CARE);
 	switch(data.kind) {
@@ -3373,7 +3372,6 @@ NhlErrorTypes _NclIfbinnumrec
 	ng_size_t dimsize = 1;
 	int swap_bytes = 0;
 	int marker_size = 4;
-	NhlErrorTypes ret = NhlNOERROR;
 	NclFileClassPart *fcp = &(nclFileClassRec.file_class);
 	
 #ifdef ByteSwapped
@@ -3501,7 +3499,6 @@ NhlErrorTypes _NclIfbinrecwrite
 	long long ind1,ind2;
 	ssize_t n;
 	int n_dims;
-	NhlErrorTypes ret = NhlNOERROR;
 	int rsize = 0;
 	NclBasicDataTypes datai_type;
 	ng_size_t total;
@@ -5375,7 +5372,6 @@ NhlErrorTypes _NclIfbindirwrite
 ()
 #endif
 {
-	NhlErrorTypes ret = NhlNOERROR;
 	NclStackEntry fpath;
 	NclStackEntry value;
 	NclTypeClass thetype;
@@ -5557,7 +5553,6 @@ NhlErrorTypes _NclIfbinwrite
 ()
 #endif
 {
-	NhlErrorTypes ret = NhlNOERROR;
 	NclStackEntry fpath;
 	NclStackEntry value;
 	NclTypeClass thetype;
@@ -5568,7 +5563,6 @@ NhlErrorTypes _NclIfbinwrite
 	ng_size_t  totalsize = 0;
 	NclFileClassPart *fcp = &(nclFileClassRec.file_class);
 	int swap_bytes = 0;
-	long long ll_total;
 	int marker_size = 4;
 
 #ifdef ByteSwapped
@@ -17123,7 +17117,7 @@ NhlErrorTypes _NclIgaus
 
 
 NhlErrorTypes _NclIGetVarDims
-#if	NhlNeedProton
+#if	NhlNeedProto
 (void)
 #else
 ()
@@ -17963,6 +17957,159 @@ NhlErrorTypes _NclIFileEnumDef(void)
     return(ret);
 }
 
+NhlErrorTypes _NclIFileCompoundTypeDef(void)
+{
+    NclScalar missing;
+    int has_missing;
+
+    obj *thefile_id;
+    NclQuark *compound_type_name;
+    int n;
+    NclFile thefile;
+    NhlErrorTypes ret=NhlNOERROR;
+
+    ng_size_t n_mems;
+    NclScalar mem_missing;
+    int mem_has_missing;
+    NclQuark *mem_name;
+
+    ng_size_t n_types;
+    NclScalar type_missing;
+    int type_has_missing;
+    NclQuark *mem_type;
+
+    NclScalar size_missing;
+    int size_has_missing;
+    int *size_idp;
+    NclObj size_obj;
+    NclList size_list;
+
+    int num_missing = 0;
+
+    thefile_id = (obj*)NclGetArgValue(
+                        0,
+                        5,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL,
+                        NULL,
+                        0);
+    thefile = (NclFile)_NclGetObj((int)*thefile_id);
+    if(thefile == NULL)
+    {
+        NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+            "_NclIFileCompoundDef: CANNOT add compound to empty file.\n"));
+        return(NhlFATAL);
+    }
+
+    compound_type_name = (NclQuark*)NclGetArgValue(
+                        1,
+			5,
+                        NULL,
+                        NULL,
+                        &missing,
+                        &has_missing,
+                        NULL,
+                        0);
+
+    if(has_missing)
+    {
+        if((NclQuark)*compound_type_name == missing.stringval)
+        {
+            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+                "_NclIFileCompoundDef: CANNOT add compound type named <%s>, which is same as missing-value.\n",
+                NrmQuarkToString((NclQuark)*compound_type_name)));
+            return(NhlFATAL);
+        }
+    }
+
+    mem_name = (NclQuark*)NclGetArgValue(
+                        2,
+                        5,
+                        NULL,
+                        &n_mems,
+                        &mem_missing,
+                        &mem_has_missing,
+                        NULL,
+                        0);
+
+    if(mem_has_missing)
+    {
+        num_missing = 0;
+
+        for(n = 0; n < n_mems; n++)
+        {
+            if((NclQuark)mem_name[n] == mem_missing.stringval)
+                num_missing++;
+        }
+
+        if(num_missing == n_mems)
+        {
+            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+                "_NclIFileCompoundTypeDef: Can not have all members as missing.\n"));
+            return(NhlFATAL);
+        }
+    }
+
+    mem_type = (NclQuark *)NclGetArgValue(
+                        3,
+                        5,
+                        NULL,
+                        &n_types,
+                        &type_missing,
+                        &type_has_missing,
+                        NULL,
+                        0);
+    if (n_types != n_mems) {
+            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+                "_NclIFileCompoundTypeDef: number of types must equal number of members.\n"));
+            return(NhlFATAL);
+    }
+
+    if(type_has_missing)
+    {
+        num_missing = 0;
+
+        for(n = 0; n < n_types; n++)
+        {
+            if((NclQuark)mem_type[n] == type_missing.stringval)
+                num_missing++;
+        }
+
+        if(num_missing == n_types)
+        {
+            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+                "_NclIFileCompoundTypeDef: Can not have all members as missing.\n"));
+            return(NhlFATAL);
+        }
+    }
+
+    size_idp = (int *)NclGetArgValue(
+                        4,
+                        5,
+                        NULL,
+                        NULL,
+                        &size_missing,
+                        &size_has_missing,
+                        NULL,
+                        0);
+
+    size_obj = _NclGetObj(*size_idp);
+    size_list = (NclList) size_obj;
+    if (size_list->list.nelem != n_mems) {
+            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+                "_NclIFileCompoundTypeDef: number of size list elements must equal number of members.\n"));
+            return(NhlFATAL);
+    }
+    
+    ret = _NclFileAddCompoundType(thefile, *compound_type_name, 
+				  n_mems, mem_name, mem_type, size_list);
+
+    return(ret);
+}
+
+
 NhlErrorTypes _NclIFileCompoundDef(void)
 {
     ng_size_t n_compounds;
@@ -18184,6 +18331,7 @@ NhlErrorTypes _NclIFileCompoundDef(void)
 
     return(ret);
 }
+
 
 NhlErrorTypes _NclIFileWriteCompound(void)
 {
@@ -20615,7 +20763,6 @@ NhlErrorTypes _NclIListIndexFromName(void)
 
 	NclListObjList *step;
 
-	int comp_val = 0;
 
    	list_id = (obj*)NclGetArgValue(
            0,
@@ -20688,16 +20835,12 @@ NhlErrorTypes _NclIListVarNameFromIndex(void)
 	NclList thelist = NULL;
 	ng_size_t dimsize = 1;
 	NclQuark *ret_val;
-	int nm = 1;
 	int i;
 
 	int *idx;
-	NclQuark var_name = -1;
 	NclVar cur_var;
-
 	NclListObjList *step;
 
-	int comp_val = 0;
 
    	list_id = (obj*)NclGetArgValue(
            0,
@@ -21065,20 +21208,6 @@ NhlErrorTypes _NclISetFileOption(void)
 	NclQuark option;
 	NhlErrorTypes ret;
 	int n_dims = 1;
-	int n = 0;
-
-	NrmQuark filetype_lower;
-	NrmQuark option_lower;
-	NrmQuark fs_quark = NrmStringToQuark("filestructure");
-	NrmQuark ad_lower_quark = NrmStringToQuark("advanced");
-
-	NrmQuark all_quark = NrmStringToQuark("all");
-	NrmQuark  nc_quark = NrmStringToQuark("nc");
-	NrmQuark  h5_quark = NrmStringToQuark("h5");
-	NrmQuark he5_quark = NrmStringToQuark("he5");
-	NrmQuark shp_quark = NrmStringToQuark("shp");
-
-	NrmQuark fso;
 
 	data = _NclGetArg(0,3,DONT_CARE);
 	switch(data.kind) {
@@ -31190,7 +31319,6 @@ NhlErrorTypes _Nclget_cpu_time(void)
 NhlErrorTypes _NclIGetFileVarChunkDimsizes(void)
 {
 	NclQuark *name;
-	NclQuark fname;
 	NclScalar name_missing;
 	int name_has_missing;
 	ng_size_t nchunkdims = 1;
@@ -31199,7 +31327,6 @@ NhlErrorTypes _NclIGetFileVarChunkDimsizes(void)
 	NclMultiDValData tmp_md = NULL;
 	NclFile thefile = NULL;
 	long chunkdim_sizes[NCL_MAX_DIMENSIONS];
-	int i;
 
 	chunkdim_sizes[0] = -4294967296;
 
@@ -31207,11 +31334,6 @@ NhlErrorTypes _NclIGetFileVarChunkDimsizes(void)
         switch(val.kind) {
 	case NclStk_VAR:
 		tmp_var = val.u.data_var;
-		if(tmp_var->var.var_quark > 0) {
-			fname = tmp_var->var.var_quark;
-		} else {
-			fname = -1;
-		}
 		break;
 	case NclStk_VAL:
 	default:

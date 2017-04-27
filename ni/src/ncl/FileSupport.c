@@ -2106,7 +2106,7 @@ extern NhlErrorTypes _NclFileAddEnum(NclFile infile, NclQuark enum_name, NclQuar
 
 extern NhlErrorTypes _NclFileAddCompound(NclFile infile, NclQuark compound_name, NclQuark var_name,
                                          ng_size_t n_dims, NclQuark *dim_name, ng_size_t n_mems,
-                                         NclQuark *mem_name, NclQuark *mem_type, int *mem_size)
+                                         NclQuark *mem_name, NclQuark *mem_type, NclList size_list)
 {
 	NclAdvancedFile thefile = (NclAdvancedFile) infile;
 	NclAdvancedFileClass fc = NULL;
@@ -2140,7 +2140,7 @@ extern NhlErrorTypes _NclFileAddCompound(NclFile infile, NclQuark compound_name,
 			return((*fc->advancedfile_class.create_compound_type)
                                (infile, compound_name, var_name,
                                 n_dims, dim_name,
-                                n_mems, mem_name, mem_type, mem_size));
+                                n_mems, mem_name, mem_type, size_list));
 		}
 		else
 		{
@@ -3705,7 +3705,6 @@ NclQuark _NclFindFileExt(NclQuark path, NclQuark *fname_q, NhlBoolean *is_http,
 	NclQuark lcq;
 	NclQuark lcn;
 	char buffer[NCL_MAX_STRING];
-	struct stat buf;
 
 	int i;
 
@@ -4125,8 +4124,6 @@ NclFile _NclOpenFile(NclObj inst, NclObjClass theclass, NclObjTypes obj_type,
 	struct stat file_stat;
 	short use_advanced_file_structure = 0;
 	NclFileClassPart *fcp = &(nclFileClassRec.file_class);
-	NrmQuark afs = NrmStringToQuark("advanced");
-	NrmQuark sfs = _NclGetLower(*(NrmQuark *)(fcp->options[Ncl_ADVANCED_FILE_STRUCTURE].value->multidval.val));
 	NclQuark the_real_path = path;
 
 	file_ext_q = _NclFindFileExt(path, &fname_q, &is_http, &end_of_name, &len_path, rw_status, &use_advanced_file_structure);
@@ -4513,7 +4510,7 @@ NhlErrorTypes InitializeFileOptions(NclFileOption *options)
 	int *ival;
 	ng_size_t len_dims;
 	NhlErrorTypes ret = NhlNOERROR;
-	int i, itmp;
+	int i;
 	
 	
 	/* option names are case insensitive and so are string-type 

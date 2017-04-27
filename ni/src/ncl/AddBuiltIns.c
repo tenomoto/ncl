@@ -2380,9 +2380,19 @@ void _NclAddBuiltIns
 	nargs = 0;
 	args = NewArgs(2);
 	dimsizes[0] = 1;
-	SetArgTemplate(args,0,"file",0,NclANY);nargs++;
+	SetArgTemplate(args,0,"file",1,dimsizes);nargs++;
 	SetArgTemplate(args,1,"string",1,NclANY);nargs++;
 	NclRegisterProc(_NclIFileGrpDef,args,"filegrpdef",nargs);
+
+	nargs = 0;
+	args = NewArgs(5);
+	dimsizes[0] = 1;
+	SetArgTemplate(args,0,"file",1,dimsizes);nargs++;
+	SetArgTemplate(args,1,"string",1,dimsizes);nargs++;
+	SetArgTemplate(args,2,"string",1,NclANY);nargs++;
+	SetArgTemplate(args,3,"string",1,NclANY);nargs++;
+	SetArgTemplate(args,4,"list",1,dimsizes);nargs++;
+	NclRegisterProc(_NclIFileCompoundTypeDef,args,"filecompoundtypedef",nargs);
 
 	nargs = 0;
 	args = NewArgs(5);

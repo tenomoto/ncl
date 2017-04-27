@@ -63,7 +63,7 @@ typedef NhlErrorTypes (*NclAssignFileOpaqueFunc)(NclFile thefile, NclQuark vlen_
                                                  int var_size, NclQuark dim_name);
 typedef NhlErrorTypes (*NclAssignFileCompoundFunc)(NclFile thefile, NclQuark vlen_name, NclQuark var_name,
                                                    ng_size_t n_dims, NclQuark *dim_name, ng_size_t n_mems,
-                                                   NclQuark *mem_name, NclQuark *mem_type, int *mem_size);
+                                                   NclQuark *mem_name, NclQuark *mem_type, NclList size_list);
 typedef NhlErrorTypes (*NclWriteFileCompoundFunc)(NclFile thefile, NclQuark vlen_name, NclQuark var_name,
                                                   ng_size_t n_mems, NclQuark *mem_name, NclList thelist);
 

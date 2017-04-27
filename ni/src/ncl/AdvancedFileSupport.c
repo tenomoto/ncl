@@ -767,3 +767,50 @@ NrmQuark *_NclAdvancedGetUserTypeNames(NclFileGrpNode * grpnode, int *num_types,
 	*num_types = n_types;
 	return udt_names;
 }
+
+extern NhlErrorTypes _NclFileAddCompoundType(NclFile infile, NclQuark compound_name, 
+					     ng_size_t n_mems, NclQuark *mem_name, NclQuark *mem_type, NclList size_list)
+{
+	NclAdvancedFile thefile = (NclAdvancedFile) infile;
+	NclAdvancedFileClass fc = NULL;
+
+      /*
+       *fprintf(stderr, "\nHit _NclFileAddCompoundType, file: %s, line: %d\n", __FILE__, __LINE__);
+       *fprintf(stderr, "\tcompound name: <%s>, var name: <%s>, n_dims = %d, dim_name: <%s>\n",
+       *                 NrmQuarkToString(compound_name), NrmQuarkToString(var_name),
+       *                 n_dims, NrmQuarkToString(dim_name[0]));
+       */
+
+	if(infile == NULL)
+	{
+		NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+			"_NclFileAddCompound: CANNOT add compound to empty file.\n"));
+		return(NhlFATAL);
+	}
+
+	if(! thefile->file.advanced_file_structure)
+	{
+		NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+			"_NclFileAddCompound: Old File Structure DO NOT Support compound.\n"));
+		return(NhlFATAL);
+	}
+
+	fc = (NclAdvancedFileClass)thefile->obj.class_ptr;
+	while((NclObjClass)fc != nclObjClass)
+	{
+		if(fc->advancedfile_class.create_compound_type != NULL)
+		{
+			return((*fc->advancedfile_class.create_compound_type)
+                               (infile, compound_name, NrmNULLQUARK,
+                                0, NULL,
+                                n_mems, mem_name, mem_type, size_list));
+		}
+		else
+		{
+			fc = (NclAdvancedFileClass)fc->obj_class.super_class;
+		}
+	}
+
+	return(NhlFATAL);
+}
+

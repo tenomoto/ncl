@@ -385,7 +385,7 @@ typedef NhlErrorTypes (*NclAddOpaqueFunc)(void *record, NclQuark opaque_name, Nc
                                           int var_size, NclQuark dim_name);
 typedef NhlErrorTypes (*NclAddCompoundFunc)(void *record, NclQuark compound_name, NclQuark var_name,
                                             ng_size_t n_dims, NclQuark *dim_name, ng_size_t n_mems,
-                                            NclQuark *mem_name, NclQuark *mem_type, int *mem_size);
+                                            NclQuark *mem_name, NclQuark *mem_type, NclList mem_size_list);
 typedef NhlErrorTypes (*NclWriteCompoundFunc)(void *record, NclQuark compound_name, NclQuark var_name,
                                               ng_size_t n_mems, NclQuark *mem_name, NclList thelist);
 

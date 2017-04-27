@@ -8831,7 +8831,7 @@ static NhlErrorTypes AdvancedFileWriteGrp(NclFile infile, NclQuark grpname)
     NclAdvancedFile thefile = (NclAdvancedFile) infile;
     NhlErrorTypes ret = NhlNOERROR;
     NclFileGrpNode *grpnode = thefile->advancedfile.grpnode;
-    char *cp, *cp1, *cp2;
+    char *cp;
     char *gname_all = NrmQuarkToString(grpname);
     NrmQuark qgname, qpgrp_name;
     char *lgname;
@@ -9065,7 +9065,7 @@ NhlErrorTypes AdvancedFileCreateCompoundType(NclFile infile, NclQuark compound_n
                                         NclQuark var_name, 
                                         ng_size_t n_dims, NclQuark *dim_name,
                                         ng_size_t n_mems, NclQuark *mem_name,
-                                        NclQuark *mem_type, int *mem_size)
+                                        NclQuark *mem_type, NclList mem_size_list)
 {
     NclAdvancedFile thefile = (NclAdvancedFile) infile;
     NhlErrorTypes ret = NhlNOERROR;
@@ -9093,7 +9093,7 @@ NhlErrorTypes AdvancedFileCreateCompoundType(NclFile infile, NclQuark compound_n
         ret = (*thefile->advancedfile.format_funcs->add_compound)
                ((void *)thefile->advancedfile.grpnode, compound_name, var_name,
                 n_dims, dim_name,
-                n_mems, mem_name, mem_type, mem_size);
+                n_mems, mem_name, mem_type, mem_size_list);
     }
     
   /*
@@ -9145,10 +9145,9 @@ NclQuark *_NclGetGrpNames(void *therec, int *num_grps)
     NclFileGrpNode *tmpgrpnode = NULL;
     NclQuark *out_quarks = NULL;
     NclQuark *tmp_quarks = NULL;
-    char carr[2048],carr2[2048];
+    char carr[2048];
     int n, ng;
     int i;
-    char *cp;
     char *top_group = NULL;
     static NrmQuark qtop_group = NrmNULLQUARK;
 
@@ -9158,7 +9157,7 @@ NclQuark *_NclGetGrpNames(void *therec, int *num_grps)
 	    return NULL;
     if(NULL != grpnode->grp_rec)
     {
-	if (qtop_group == NULL) {
+	if (qtop_group == NrmNULLQUARK) {
 		qtop_group = grpnode->real_name;
 	}
 	top_group = NrmQuarkToString(qtop_group);
