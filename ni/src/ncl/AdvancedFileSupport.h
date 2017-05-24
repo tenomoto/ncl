@@ -107,7 +107,7 @@ void *GetCachedValue(NclFileVarNode *varnode,
 void _NclCopyGroupOptions(NclFileGrpNode *grpnode, NclFileGrpNode *rootgrpnode);
 void _NclCopyOption(NCLOptions *option, NclQuark name,
                     NclBasicDataTypes data_type, int n_items, void *values);
-
+NclFileUDTNode *_NclAdvancedGetUserTypeNode(NclFileGrpNode *grpnode, NrmQuark udt_name, int level);
 NrmQuark *_NclAdvancedGetUserTypeNames(NclFileGrpNode *grpnode, int *num_types, int level);
 NhlErrorTypes _NclFileAddCompoundType(NclFile infile, NclQuark compound_name, 
 				      ng_size_t n_mems, NrmQuark *mem_name, NrmQuark *mem_type, NclList size_list);

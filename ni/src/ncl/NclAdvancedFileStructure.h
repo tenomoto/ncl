@@ -37,7 +37,7 @@ typedef struct _NclFileUserDefinedTypeNode
 {
     ng_size_t         id;
     size_t            size;
-    int               ncl_class;
+    NclUDTType        ncl_class;
     int               max_fields;
     int               n_fields;
     NclQuark          name;

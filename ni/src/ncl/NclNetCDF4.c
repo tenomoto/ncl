@@ -87,9 +87,9 @@ NclFileDimRecord *_NC4_get_dims(int gid, int n_dims, int unlimited_dim_idx);
 NclFileAttRecord *_NC4_get_atts(int gid, int aid, int n_atts);
 NclFileUDTRecord *_NC4_get_udts(int gid, int uid, int n_udts);
 
-void _NC4_add_udt(NclFileUDTRecord **rootudtrec,
+NclFileUDTNode *_NC4_add_udt(NclFileUDTRecord **rootudtrec,
                   int gid, int uid, NclQuark name,
-                  int ncl_class, nc_type base_nc_type,
+                  NclUDTType ncl_class, nc_type base_nc_type,
                   size_t size, size_t nfields, 
                   NclQuark *mem_name, NclBasicDataTypes *mem_type);
 
@@ -339,9 +339,9 @@ static int NC4InitializeOptions(NclFileGrpNode *grpnode)
     return 0;
 }
 
-void _NC4_add_udt(NclFileUDTRecord **rootudtrec,
+NclFileUDTNode *_NC4_add_udt(NclFileUDTRecord **rootudtrec,
                   int gid, int uid, NclQuark name,
-                  int ncl_class, nc_type base_nc_type,
+                  NclUDTType ncl_class, nc_type base_nc_type,
                   size_t size, size_t nfields,
                   NclQuark *mem_name, NclBasicDataTypes *mem_type)
 {
@@ -393,6 +393,7 @@ void _NC4_add_udt(NclFileUDTRecord **rootudtrec,
   /*
    *fprintf(stderr, "Leave _NC4_add_udt, file: %s, line: %d\n\n", __FILE__, __LINE__);
    */
+    return udtnode;
 }
 
 static void *NC4InitializeFileRec(NclFileFormat *format)
@@ -6160,7 +6161,7 @@ NhlErrorTypes NC4AddVlen(void *rec, NclQuark vlen_name, NclQuark var_name,
 
     _NC4_add_udt(&(rootgrpnode->udt_rec),
                   rootgrpnode->gid, nc_vlen_type_id, vlen_name,
-                  NC_VLEN, *nc_base_type,
+                  NCL_UDT_vlen, *nc_base_type,
                   0, 1, mem_name, mem_type);
 
     NclFree(nc_base_type);
@@ -6384,7 +6385,7 @@ NhlErrorTypes NC4AddEnum(void *rec, NclQuark enum_name, NclQuark var_name,
 
     _NC4_add_udt(&(rootgrpnode->udt_rec),
                   rootgrpnode->gid, nc_enum_type_id, enum_name,
-                  NC_ENUM, *nc_base_type,
+                  NCL_UDT_enum, *nc_base_type,
                   0, 1, udt_mem_name, udt_mem_type);
 
     NclFree(nc_base_type);
@@ -6590,7 +6591,7 @@ NhlErrorTypes NC4AddOpaque(void *rec, NclQuark opaque_name, NclQuark var_name,
 
     _NC4_add_udt(&(rootgrpnode->udt_rec),
                   rootgrpnode->gid, nc_opaque_type_id, opaque_name,
-                  NC_OPAQUE, NC_UBYTE,
+                  NCL_UDT_opaque, NC_UBYTE,
                   0, 1, mem_name, mem_type);
 
     dimnode = _getDimNodeFromNclFileGrpNode(rootgrpnode, dim_name);
@@ -6775,7 +6776,7 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
     int i;
     NclListObjList *list_item;
     int dim_size;
-
+    NclFileUDTNode *udtnode;
 
     /* If var_name is NrmNULLQUARK this routine creates only the type; otherwise it creates both the type 
        and a variable */
@@ -6861,6 +6862,11 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
     if(NC_NOERR != nc_ret)
         check_err(nc_ret, __LINE__, __FILE__);
 
+    udtnode = _NC4_add_udt(&(grpnode->udt_rec),
+			   grpnode->gid, nc_compound_type_id, compound_name,
+			   NCL_UDT_compound, NC_COMPOUND,
+			   compound_length, n_mems, udt_mem_name, udt_mem_type);
+
   /*
    *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
    *fprintf(stderr, "\tgrpnode->gid = %d\n", grpnode->gid);
@@ -6899,6 +6905,10 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
             nc_insert_array_compound(grpnode->gid, nc_compound_type_id,
                                      NrmQuarkToString(mem_name[n]),
                                      mem_offset[n], *tmp_nc_type, n_list_dims, tmp_dims);
+	    udtnode->fields[n].n_dims = n_list_dims;
+	    udtnode->fields[n].dim_sizes = NclMalloc(n_list_dims * sizeof(ng_size_t));
+	    for (i = 0; i < n_list_dims; i++)
+		    udtnode->fields[n].dim_sizes[i] = (ng_size_t) tmp_dims[i];
         }
         else
         {
@@ -6913,6 +6923,10 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
             nc_insert_compound(grpnode->gid, nc_compound_type_id,
                                NrmQuarkToString(mem_name[n]),
                                mem_offset[n], *tmp_nc_type);
+
+	    udtnode->fields[n].n_dims = 1;
+	    udtnode->fields[n].dim_sizes = NclMalloc(sizeof(ng_size_t));
+	    udtnode->fields[n].dim_sizes[0] = 1;
         }
 	list_item = list_item->next;
 	if (list_item) {
@@ -6927,7 +6941,7 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
 
     _NC4_add_udt(&(grpnode->udt_rec),
                   grpnode->gid, nc_compound_type_id, compound_name,
-                  NC_COMPOUND, NC_COMPOUND,
+                  NCL_UDT_compound, NC_COMPOUND,
                   compound_length, n_mems, udt_mem_name, udt_mem_type);
 
     if (var_name == NrmNULLQUARK) 

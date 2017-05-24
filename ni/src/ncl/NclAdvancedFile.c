@@ -6140,10 +6140,26 @@ static NhlErrorTypes AdvancedFileAddVar(NclFile infile, NclQuark varname,
             }
             else
             {
-                NHLPERROR((NhlFATAL,NhlEUNKNOWN,
-                    "AdvancedFileAddVar Incorrect type specified, can't add variable (%s)",
-                    NrmQuarkToString(varname)));
-                ret = NhlFATAL;
+		    NclFileUDTNode *udt_node;
+		    /* find out if type is a user-defined type */
+		    udt_node = _NclAdvancedGetUserTypeNode(thefile->advancedfile.grpnode,type,0);
+		    if (udt_node != NULL) {
+			    switch (udt_node->ncl_class) {
+			    case NCL_UDT_compound:
+				    ret = (*thefile->advancedfile.format_funcs->add_compound)
+					    ((void *)thefile->advancedfile.grpnode, type, varname,
+					     n_dims, dimnames,0, NULL, NULL, NULL);
+				    break;
+			    default:
+				    break;
+			    }
+		    }
+		    else {
+			    NHLPERROR((NhlFATAL,NhlEUNKNOWN,
+				       "AdvancedFileAddVar Incorrect type specified, can't add variable (%s)",
+				       NrmQuarkToString(varname)));
+			    ret = NhlFATAL;
+		    }
             }
 
             if(ret < NhlWARNING) 

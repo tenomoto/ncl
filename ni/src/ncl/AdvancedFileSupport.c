@@ -768,6 +768,41 @@ NrmQuark *_NclAdvancedGetUserTypeNames(NclFileGrpNode * grpnode, int *num_types,
 	return udt_names;
 }
 
+NclFileUDTNode *_NclAdvancedGetUserTypeNode(NclFileGrpNode *grpnode, NrmQuark udt_name, int level)
+{
+	NclFileGrpNode *pgrpnode;
+	int i;
+	int n_types = 0, tmp_n_types = 0;
+	NclFileUDTNode *udt_node;
+	
+
+	/* since UDTs in HDF5 and NetCDF4 files are accessible and usable within any
+	   group in the file, this routine returns the paths of all UTDs no matter
+	   which group in the file is the caller */
+	
+	pgrpnode = grpnode;
+	if (level == 0) {
+		while (pgrpnode->parent != NULL) {
+			pgrpnode = pgrpnode->parent;
+		}
+	}
+	if (pgrpnode->udt_rec != NULL) {
+		for (i = 0; i < pgrpnode->udt_rec->n_udts; i++) {
+			if (udt_name == pgrpnode->udt_rec->udt_node[i].name)
+				return &(pgrpnode->udt_rec->udt_node[i]);
+		}
+	}
+	if (pgrpnode->grp_rec && pgrpnode->grp_rec->n_grps) {
+		level++;
+		for (i = 0; i < pgrpnode->grp_rec->n_grps; i++) {
+			udt_node = _NclAdvancedGetUserTypeNode(pgrpnode->grp_rec->grp_node[i],udt_name,level);
+			if (udt_node != NULL)
+				return udt_node;
+		}
+	}
+	return NULL;
+}
+
 extern NhlErrorTypes _NclFileAddCompoundType(NclFile infile, NclQuark compound_name, 
 					     ng_size_t n_mems, NclQuark *mem_name, NclQuark *mem_type, NclList size_list)
 {

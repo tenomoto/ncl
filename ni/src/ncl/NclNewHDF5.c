@@ -7777,7 +7777,7 @@ NhlErrorTypes H5AddCompound(void *rec, NclQuark compound_name, NclQuark var_name
 
     _Ncl_add_udt(&(grpnode->udt_rec),
                  grpnode->fid, -1, compound_name,
-                 NCL_compound, NCL_compound,
+                 NCL_UDT_compound, NCL_compound,
                  compound_length, n_mems, udt_mem_name, udt_mem_type);
 
     for(n = 0; n < n_dims; n++)
@@ -8022,7 +8022,7 @@ NhlErrorTypes H5WriteCompound(void *rec, NclQuark compound_name, NclQuark var_na
 
 void _H5_add_udt(NclFileUDTRecord **rootudtrec,
                  int gid, int uid, NclQuark name,
-                 int ncl_class, size_t base_type,
+                 NclUDTType ncl_class, size_t base_type,
                  size_t size, size_t nfields,
                  NclQuark *mem_name, NclBasicDataTypes *mem_type)
 {
@@ -8188,7 +8188,7 @@ NhlErrorTypes H5AddEnum(void *rec, NclQuark enum_name, NclQuark var_name,
 
     _H5_add_udt(&(rootgrpnode->udt_rec),
                   rootgrpnode->fid, -1, enum_name,
-                  NCL_enum, NCL_enum,
+                  NCL_UDT_enum, NCL_enum,
                   0, 1, udt_mem_name, udt_mem_type);
 
     dimnode = _getDimNodeFromNclFileGrpNode(rootgrpnode, dim_name);
@@ -8309,7 +8309,7 @@ NhlErrorTypes H5AddOpaque(void *rec, NclQuark opaque_name, NclQuark var_name,
 
     _H5_add_udt(&(rootgrpnode->udt_rec),
                   rootgrpnode->fid, -1, opaque_name,
-                  NC_OPAQUE, NC_UBYTE,
+                  NCL_UDT_opaque, NCL_ubyte,
                   var_size, 1, mem_name, mem_type);
 
     dimnode = _getDimNodeFromNclFileGrpNode(rootgrpnode, dim_name);
@@ -8409,7 +8409,7 @@ NhlErrorTypes H5AddVlen(void *rec, NclQuark vlen_name, NclQuark var_name,
 
     _H5_add_udt(&(rootgrpnode->udt_rec),
                   rootgrpnode->fid, -1, vlen_name,
-                  NCL_vlen, NCL_vlen,
+                  NCL_UDT_vlen, NCL_vlen,
                   0, 1, mem_name, mem_type);
 
     dim_sizes = (long *)NclCalloc(n_dims, sizeof(long));
