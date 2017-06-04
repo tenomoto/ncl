@@ -246,12 +246,12 @@
 #endif	/* PNGlib */
 
 #ifndef CAIROlib
-#define CAIROlib -lcairo -lXrender -lfontconfig -lpixman-1 -lfreetype -lexpat -lpng -lz -liconv -lbz2
+#define CAIROlib  -lcairo -lfontconfig -lpixman-1 -lfreetype -lexpat -lpng -lz -lpthread -lXrender -lbz2
 #endif
 
 /* This should be same as CAIROlib except with no explicit paths */
 #ifndef CAIROlibuser
-#define CAIROlibuser -lcairo -lXrender -lfontconfig -lpixman-1 -lfreetype -lexpat -lpng -lz -liconv -lbz2
+#define CAIROlibuser  -lcairo -lfontconfig -lpixman-1 -lfreetype -lexpat -lpng -lz -lpthread -lXrender -lbz2
 #endif
 
 #ifdef	BuildHDFEOS
@@ -294,6 +294,12 @@
 #define GDALlib
 #endif
 
+#ifdef BuildVDC
+#define VDClib -lvdc -lwasp -lcommon -Wl,-rpath,/glade/u/home/stasj/vapor/targets/Linux_x86_64/bin
+#else
+#define VDClib
+#endif
+
 #ifdef BuildGRIDSPEC
 #ifndef	GRIDSPEClib
 #define	GRIDSPEClib   -lcf
@@ -311,7 +317,7 @@
 #endif	/* EEMDlib */
 
 #ifndef	NetCDFlib
-#define	NetCDFlib	-lnetcdf -lcurl
+#define	NetCDFlib	-lnetcdf -lcurl -lcrypto -lz -lrt -ldl -lssl -lidn
 /*#define	NetCDFlib	-lnetcdf -lcurl -lssl -lidn -lrt -lldap */
 /*#define	NetCDFlib	-lnetcdf -lcurl -lcrypto -lldap -lssl */
 #endif	/* NetCDFlib */
@@ -677,6 +683,7 @@ HDFEOSLIB	= HDFEOSlib
 HDFEOS5LIB	= HDFEOS5lib
 HDF5LIB		= HDF5lib
 GDALLIB		= GDALlib
+VDCLIB		= VDClib
 GRIB2LIB	= GRIB2lib
 EEMDLIB		= EEMDlib
 UDUNITSLIB	= UdUnitslib

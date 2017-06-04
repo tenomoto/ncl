@@ -58,6 +58,10 @@ short    NCLuseAFS;
 #include <ogr_srs_api.h>
 #endif
 
+#ifdef BuildVDC
+#include <vapor/VDC_c.h>
+#endif
+
 #include "defs.h"
 #include "NclMultiDValData.h"
 #include "NclFile.h"
@@ -80,6 +84,13 @@ short    NCLuseAFS;
 #endif
 
 #include <sys/stat.h>
+
+#define DebugFileSupportC
+#ifdef DebugFileSupportC
+#define DebugFuncPrint() fprintf(stderr, "[%s:%i] %s\n", __FILE__, __LINE__, __func__); // FUNCPRINT
+#else
+#define DebugFuncPrint()
+#endif
 
 NclQuark _NclVerifyFile(NclQuark the_path, NclQuark pre_file_ext_q, short *use_advanced_file_structure);
 
@@ -3485,6 +3496,7 @@ NclQuark option;
 struct _NclMultiDValDataRec *value;
 #endif
 {
+	DebugFuncPrint(); // FUNCPRINT
 	NclFileClass fc = NULL;
 	NhlErrorTypes ret;
 	NrmQuark option_lower;
@@ -3503,6 +3515,7 @@ struct _NclMultiDValDataRec *value;
 		NrmQuark  h5_quark = NrmStringToQuark("h5");
 		NrmQuark he5_quark = NrmStringToQuark("he5");
 		NrmQuark shp_quark = NrmStringToQuark("shp");
+		NrmQuark vdc_quark = NrmStringToQuark("vdc");
 		NrmQuark fso;
 		int n;
 
@@ -3698,6 +3711,7 @@ NclQuark option;
 NclQuark _NclFindFileExt(NclQuark path, NclQuark *fname_q, NhlBoolean *is_http,
 			char **end_of_name, int *len_path, int rw_status, short *use_advanced_file_structure)
 {
+	DebugFuncPrint(); // FUNCPRINT
 	NclQuark file_ext_q = -1;
 	char *the_path = NrmQuarkToString(path);
 	char *last_slash = NULL;
@@ -3810,11 +3824,13 @@ NclQuark _NclFindFileExt(NclQuark path, NclQuark *fname_q, NhlBoolean *is_http,
 
 NclQuark _NclVerifyFile(NclQuark the_path, NclQuark pre_file_ext_q, short *use_advanced_file_structure)
 {
+//	DebugFuncPrint(); // FUNCPRINT
+	fprintf(stderr, "[%s:%i] %s(\"%s\", \"%s\", %i)\n", __FILE__, __LINE__, __func__, NrmQuarkToString(the_path), NrmQuarkToString(pre_file_ext_q), *use_advanced_file_structure); // FUNCPRINT
 	NclQuark cur_ext_q;
 	NclQuark ori_file_ext_q = -1;
 	NclQuark file_ext_q = pre_file_ext_q;
 
-        char *ext_list[] = {"nc"
+        char *ext_list[] = { "nc"
                           , "gr"
 #ifdef BuildHDF5
 #ifdef BuildHDFEOS5
@@ -3911,6 +3927,22 @@ NclQuark _NclVerifyFile(NclQuark the_path, NclQuark pre_file_ext_q, short *use_a
 
 		if(NrmStringToQuark("nc") == cur_ext_q)
 		{
+#ifdef BuildVDC
+			// Since vdc uses the same file ext and it is an extension of NetCDF, it needs to be checked first
+			fprintf(stderr, "Checking vdc file ext...\n"); // FUNCPRINT
+            found = 0;
+
+			VDC *vdc = VDC_new();
+			int success = VDC_Initialize(vdc, filename, VDC_AccessMode_R);
+			if (vdc) VDC_delete(vdc);
+
+        	if(success >= 0) {
+				cur_ext_q = NrmStringToQuark("vdc");
+        		file_ext_q = cur_ext_q;
+        		found = 1;
+				break;
+        	}
+#endif
 			int cdfid;
 			int format;
 			int nc_ret = NC_NOERR;
@@ -4114,6 +4146,7 @@ NclFile _NclOpenFile(NclObj inst, NclObjClass theclass, NclObjTypes obj_type,
 			unsigned int obj_type_mask, NclStatus status,
 			NclQuark path, int rw_status)
 {
+	DebugFuncPrint(); // FUNCPRINT
 	NclFile file_out = NULL;
 
 	NclQuark file_ext_q = -1;
@@ -4503,6 +4536,7 @@ NclFileOption file_options[] = {
 	{ NrmNULLQUARK, NrmNULLQUARK, NULL, NULL, NULL, 0, NULL },   /* advanced file-structure */
 	{ NrmNULLQUARK, NrmNULLQUARK, NULL, NULL, NULL, 4, NULL },  /* Fortran binary file record marker size */
 	{ NrmNULLQUARK, NrmNULLQUARK, NULL, NULL, NULL, 0, NULL },   /* GRIB cache size */
+	{ NrmNULLQUARK, NrmNULLQUARK, NULL, NULL, NULL, 99, NULL },   /* VDC Level of Detail */
 };
 
 NhlErrorTypes InitializeFileOptions(NclFileOption *options)
@@ -4973,6 +5007,23 @@ NhlErrorTypes InitializeFileOptions(NclFileOption *options)
 				    NULL,1,&len_dims,PERMANENT,NULL,(NclTypeClass)nclTypeintClass);
 	options[Ncl_GRIB_CACHE_SIZE].valid_values = NULL;
 	/* End of options */
+
+	/* VDC option Level_Of_Detail */
+	options[Ncl_VDC_LEVEL_OF_DETAIL].format = NrmStringToQuark("vdc");
+	options[Ncl_VDC_LEVEL_OF_DETAIL].name = NrmStringToQuark("levelofdetail");
+	len_dims = 1;
+	ival = (int*) NclMalloc(sizeof(int));
+	*ival = -1;
+	options[Ncl_VDC_LEVEL_OF_DETAIL].value = 
+		_NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void *)ival,
+				    NULL,1,&len_dims,PERMANENT,NULL,(NclTypeClass)nclTypeintClass);
+	ival = (int*) NclMalloc(sizeof(int));
+	*ival = -1;
+	options[Ncl_VDC_LEVEL_OF_DETAIL].def_value = 
+		_NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void *)ival,
+				    NULL,1,&len_dims,PERMANENT,NULL,(NclTypeClass)nclTypeintClass);
+	options[Ncl_VDC_LEVEL_OF_DETAIL].valid_values = NULL;
+
 
 	/* Binary option KeepOpen */
 	options[Ncl_KEEP_OPEN].format = NrmStringToQuark("bin");

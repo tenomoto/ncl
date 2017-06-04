@@ -79,6 +79,13 @@ void
 extern NclFormatFunctionRecPtr AdvancedOGRAddFileFormat(void);
 #endif
 
+// TODO IFDEF this
+extern NclFormatFunctionRecPtr VDCAddFileFormat(
+#if	NhlNeedProto
+void
+#endif
+);
+
 void _NclAddFileFormats
 #if	NhlNeedProto
 (void)
@@ -91,6 +98,10 @@ void _NclAddFileFormats
 	_NclRegisterFormat(NetCdfAddFileFormat,"nc3");
 	_NclRegisterFormat(NetCdfAddFileFormat,"nc4");
 	_NclRegisterFormat(NetCdfAddFileFormat,"netcdf");
+
+	// TODO IFDEF this
+	_NclRegisterFormat(VDCAddFileFormat,"vdc");
+
 #ifdef BuildHDF4
 	_NclRegisterFormat(HDFAddFileFormat,"hdf");
 	_NclRegisterFormat(HDFAddFileFormat,"hd");
