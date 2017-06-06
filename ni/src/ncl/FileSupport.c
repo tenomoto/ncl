@@ -3742,6 +3742,9 @@ NclQuark _NclFindFileExt(NclQuark path, NclQuark *fname_q, NhlBoolean *is_http,
 #ifdef BuildGRIB2
 			    ".grib2", ".grb2", ".gr2",
 #endif
+#ifdef BuildVDC
+				".vdc", // Fake .vdc for creating files. Will be replaced with .nc when file is created
+#endif
 			    ".grib1", ".grb1", ".grib", ".grb", ".gr1", ".gr",
 	                    ".netcdf"};
 

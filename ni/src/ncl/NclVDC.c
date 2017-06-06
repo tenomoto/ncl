@@ -15,22 +15,14 @@
 
 #include <vapor/VDC_c.h>
 
-// TODO
 #define VDC_DEBUG
 #ifdef VDC_DEBUG
 #define VDC_DEBUG_printf(...) fprintf (stderr, __VA_ARGS__)
+#define VDC_DEBUG_printff(...) { fprintf (stderr, "[%s:%i]%s", __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
 #else
 #define VDC_DEBUG_printf(...)
+#define VDC_DEBUG_printff(...)
 #endif
-
-static void dump(void *d, int size) {
-	printf("%p\n==============\n", d);
-	for (int i = 0; i < size; i++) {
-		printf("%x", (((char*)d)[i])&0xf);
-		if (i%2==1)printf(" ");
-	}
-	printf("\n");
-}
 
 typedef struct _VDCRecord VDCRecord;
 
@@ -54,16 +46,43 @@ struct _VDCRecord {
 		int levelOfDetail;
 };
 
-static int _VDCXTypeToNCLDataType(int xtype)
+static NclBasicDataTypes _VDCXTypeToNCLDataType(VDC_XType xtype)
 {
 	switch (xtype) {
-		case VDC_XType_TEXT: return NCL_string;
-		case VDC_XType_INT32: return NCL_int;
-		case VDC_XType_INT64: return NCL_int64;
-		case VDC_XType_FLOAT: return NCL_float;
-		case VDC_XType_DOUBLE: return NCL_double;
+		case VDC_XType_TEXT:    return NCL_string;
+		case VDC_XType_INT32:   return NCL_int;
+		case VDC_XType_INT64:   return NCL_int64;
+		case VDC_XType_FLOAT:   return NCL_float;
+		case VDC_XType_DOUBLE:  return NCL_double;
 		case VDC_XType_INVALID: return NCL_none;
-		default: return NCL_none;
+		default:                return NCL_none;
+	}
+}
+
+static VDC_XType _NCLDataTypeToVDCXType(NclBasicDataTypes NCLtype)
+{
+	switch (NCLtype) {
+		case NCL_string: return VDC_XType_TEXT;
+		case NCL_int:    return VDC_XType_INT32;
+		case NCL_int64:  return VDC_XType_INT64;
+		case NCL_long:   return VDC_XType_INT64;
+		case NCL_float:  return VDC_XType_FLOAT;
+		case NCL_double: return VDC_XType_DOUBLE;
+		case NCL_none:   return VDC_XType_INVALID;
+		default:         return VDC_XType_INVALID;
+	}
+}
+
+static const char *_NCLDataTypeToString(NclBasicDataTypes NCLtype)
+{
+	switch (NCLtype) {
+		case NCL_string: return "string";
+		case NCL_int:    return "int";
+		case NCL_int64:  return "int64";
+		case NCL_float:  return "float";
+		case NCL_double: return "double";
+		case NCL_none:   return "none";
+		default:         return "UNKNOWN DATA TYPE";
 	}
 }
 
@@ -79,40 +98,73 @@ static int _dimensionNameToId(VDCRecord *rec, const char *name)
 
 static void *VDCInitializeFileRec (NclFileFormat *format)
 {
-    VDCRecord*  therec = (VDCRecord*) NULL;
+    VDC_DEBUG_printff("()\n");
+    VDCRecord*  rec = (VDCRecord*) NULL;
     
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCInitializeFileRec...\n");
-    #endif
-
-	therec = (VDCRecord*)NclCalloc(1, sizeof(VDCRecord));
-	if (! therec) {
+	rec = (VDCRecord*)NclCalloc(1, sizeof(VDCRecord));
+	if (!rec) {
 		NhlPError(NhlFATAL,ENOMEM,NULL);
 		return NULL;
 	}
-	therec->levelOfDetail = -1;
+
+	rec->variables = NULL;
+	rec->variablesIsTimeVarying = NULL;
+	rec->numVariables = 0;
+	rec->numVariablesAndCoords = 0;
+	rec->globalAtts = NULL;
+	rec->globalAttsValues = NULL;
+	rec->numAtts = 0;
+	rec->dimensions = NULL;
+	rec->numDimensions = 0;
+
+	rec->levelOfDetail = -1;
 
 	*format = _NclVDC;
-	return (void *) therec;
+	return (void *) rec;
 }
 
 
-static void *VDCCreateFile (void *rec,NclQuark path)
+static NclQuark _VDCFixExt (NclQuark path)
 {
-	VDCRecord *tmp = (VDCRecord*)rec;
+	const char *path_cstr = NrmQuarkToString(path);
+	if (!strcmp(".vdc", path_cstr + strlen(path_cstr) - 4)) {
+		char newPath[PATH_MAX];
+		char *newPathExt = &newPath[strlen(path_cstr) - 4];
+		strcpy(newPath, path_cstr);
+		strcpy(newPathExt, ".nc");
+		VDC_DEBUG_printff(": changed path from \"%s\" to \"%s\"\n", path_cstr, newPath);
+		return NrmStringToQuark(newPath);
+	}
+	return path;
+}
 
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCCreateFile...\n");
-    #endif
 
-    return((void*) tmp);
+static void *VDCCreateFile (void *rec_, NclQuark path)
+{
+    VDC_DEBUG_printff("(\"%s\")\n", NrmQuarkToString(path));
+	VDCRecord *rec = (VDCRecord*)rec_; // TODO VDC
+	path = _VDCFixExt(path);
+
+	VDC *p = VDC_new();
+    VDC_DEBUG_printff(": Initializing \"%s\"...\n", NrmQuarkToString(path));
+	int success = VDC_Initialize(p, NrmQuarkToString(path), VDC_AccessMode_W);
+    VDC_DEBUG_printf(" done\n");
+    if (success < 0) {
+		VDC_delete(p);
+        NhlPError(NhlFATAL, NhlEUNKNOWN, "Failed to create VDC file \"%s\"", NrmQuarkToString(path));
+        return NULL;
+    }       
+	rec->file_path_q = path;
+	// rec->wr_status = // TODO VDC
+
+	rec->dataSource = p;
+    VDC_DEBUG_printff(" Done\n");
+    return((void*) rec);
 }
 
 static void _defineGlobalAttributes (VDCRecord *rec)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s\n", __FILE__, __LINE__, __func__);
-    #endif
+    VDC_DEBUG_printff("()\n");
 	VDC *p = rec->dataSource;
 
 	char **names;
@@ -122,8 +174,8 @@ static void _defineGlobalAttributes (VDCRecord *rec)
 	// TODO VDC num_elements > 1
 
     rec->numAtts = count;
-    rec->globalAtts = (NclFAttRec*)NclMalloc(sizeof(NclFAttRec) * (rec->numAtts +1)); // NOTE +1 is in OGR code so I'm keeping it.
-    rec->globalAttsValues = NclMalloc(sizeof(long) * (rec->numAtts +1));
+    rec->globalAtts = (NclFAttRec*)NclMalloc(sizeof(NclFAttRec) * rec->numAtts);
+    rec->globalAttsValues = NclMalloc(sizeof(long) * rec->numAtts);
 	for (int i = 0; i < count; i++) {
 		rec->globalAtts[i].att_name_quark = NrmStringToQuark(names[i]);
 
@@ -169,9 +221,7 @@ static void _defineGlobalAttributes (VDCRecord *rec)
 
 static void _defineDimensions (VDCRecord *rec)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s\n", __FILE__, __LINE__, __func__);
-    #endif
+    VDC_DEBUG_printff("()\n");
 
 	VDC *p = rec->dataSource;
 
@@ -195,9 +245,7 @@ static void _defineDimensions (VDCRecord *rec)
 
 static void _defineVariables (VDCRecord *rec)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s\n", __FILE__, __LINE__, __func__);
-    #endif
+    VDC_DEBUG_printff("()\n");
 
 	VDC *p = rec->dataSource;
 	assert(rec->dimensions); // Dimensions need to be defined first
@@ -242,17 +290,13 @@ static void _defineVariables (VDCRecord *rec)
 
 static void *VDCOpenFile (void *therec, NclQuark path, int wr_status)
 {
+    VDC_DEBUG_printff("(\"%s\", %i)\n", NrmQuarkToString(path), wr_status);
+
 	VDCRecord *rec = (VDCRecord*) therec;
     //ng_size_t numGeometry = 0;
 
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCOpenFile...\n");
-    #endif
-
 	if(rec == NULL) {
-		#ifdef VDC_DEBUG
-		fprintf(stderr, "VDCOpenFile > rec is NULL\n");
-		#endif
+		VDC_DEBUG_printff(": rec is NULL\n");
 		return(NULL);
 	}
 
@@ -267,8 +311,7 @@ static void *VDCOpenFile (void *therec, NclQuark path, int wr_status)
 
     if (success < 0) {
 		VDC_delete(rec->dataSource);
-        NhlPError(NhlFATAL, NhlEUNKNOWN, "Failed to open VDC file: ");
-        NhlPError(NhlFATAL, NhlEUNKNOWN, NrmQuarkToString(path));
+        NhlPError(NhlFATAL, NhlEUNKNOWN, "Failed to open VDC file \"%s\"", NrmQuarkToString(path));
         return NULL;
     }       
 	rec->file_path_q = path;
@@ -284,16 +327,14 @@ static void *VDCOpenFile (void *therec, NclQuark path, int wr_status)
 
 static void VDCFreeFileRec (void* therec)
 {
-	VDCRecord *rec = (VDCRecord*)therec;
+    VDC_DEBUG_printff("()\n");
 
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCFreeFileRec...\n");
-    #endif
+	VDCRecord *rec = (VDCRecord*)therec;
 
     if (rec == NULL)
             return;
 
-	// TODO free sub variables and any file pointers
+	// TODO VDC free sub variables and any file pointers
     if (rec->variables)  NclFree(rec->variables);
     if (rec->variablesIsTimeVarying) NclFree(rec->variablesIsTimeVarying);     
     if (rec->globalAtts) NclFree(rec->globalAtts);
@@ -311,67 +352,62 @@ static void VDCFreeFileRec (void* therec)
 
 static NclQuark* VDCGetVarNames (void* therec, int *num_vars)
 {
-        VDCRecord *rec = (VDCRecord*)therec;
-        int i;
-
-        #ifdef VDC_DEBUG
-        fprintf(stderr, "VDCGetVarNames...\n");
-        #endif
-
-        NclQuark* names = (NclQuark*) NclMalloc(sizeof(NclQuark) * rec->numVariables);
-        if (names == NULL) {
-                NhlPError(NhlFATAL,ENOMEM,NULL);
-                return NULL;
-        }
-
-        for (i=0; i<rec->numVariables; i++) {
-                names[i] = rec->variables[i].var_name_quark;
-        }
-
-        *num_vars = rec->numVariables;
-        return names;
+	VDC_DEBUG_printff("()\n");
+	
+	VDCRecord *rec = (VDCRecord*)therec;
+	int i;
+	
+	NclQuark* names = (NclQuark*) NclMalloc(sizeof(NclQuark) * rec->numVariables);
+	if (rec->numVariables > 0 && names == NULL) {
+	        NhlPError(NhlFATAL,ENOMEM,NULL);
+	        return NULL;
+	}
+	
+	for (i=0; i<rec->numVariables; i++) {
+	        names[i] = rec->variables[i].var_name_quark;
+	}
+	
+	*num_vars = rec->numVariables;
+    VDC_DEBUG_printff(": returning %i variables\n", *num_vars);
+	return names;
 }
 
 
 static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 {
+    VDC_DEBUG_printff("()\n");	
+    
 	VDCRecord *rec = (VDCRecord*)therec;
-        int i=0;
+    int i=0;
 
-        #ifdef VDC_DEBUG
-        fprintf(stderr, "VDCGetVarInfo...\n");	
-        #endif
-        
-        for (i=0; i<rec->numVariables; i++) {
-                if (var_name == rec->variables[i].var_name_quark) {
-                        int j;
-                        NclFVarRec *ret = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec));
-                        ret->var_name_quark = rec->variables[i].var_name_quark;
-                        ret->var_full_name_quark = rec->variables[i].var_name_quark;
-                        ret->var_real_name_quark = rec->variables[i].var_name_quark;
-                        ret->data_type = rec->variables[i].data_type;
-                        ret->num_dimensions = rec->variables[i].num_dimensions;
-                        for (j=0; j<ret->num_dimensions; j++)
-                                ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
-                        return ret;
-                }
-        }
+    for (i=0; i<rec->numVariables; i++) {
+            if (var_name == rec->variables[i].var_name_quark) {
+                    int j;
+                    NclFVarRec *ret = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec));
+                    ret->var_name_quark = rec->variables[i].var_name_quark;
+                    ret->var_full_name_quark = rec->variables[i].var_name_quark;
+                    ret->var_real_name_quark = rec->variables[i].var_name_quark;
+                    ret->data_type = rec->variables[i].data_type;
+                    ret->num_dimensions = rec->variables[i].num_dimensions;
+                    for (j=0; j<ret->num_dimensions; j++)
+                            ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
+                    return ret;
+            }
+    }
 
-        return NULL;
+    return NULL;
 }
 
 
 static NclQuark *VDCGetDimNames (void* therec, int* num_dims)
 {
+    VDC_DEBUG_printff("()\n");
+
 	VDCRecord *rec = (VDCRecord*)therec;
     int i;
 
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCGetDimNames...");
-    #endif
-
     NclQuark* names = (NclQuark*) NclMalloc(sizeof(NclQuark) * rec->numDimensions);
-    if (names == NULL) {
+	if (rec->numDimensions > 0 && names == NULL) {
             NhlPError(NhlFATAL,ENOMEM,NULL);
             return NULL;
     }
@@ -381,21 +417,17 @@ static NclQuark *VDCGetDimNames (void* therec, int* num_dims)
     }
 
     *num_dims = rec->numDimensions;
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "returning %i dims\n", *num_dims);
-    #endif
+    VDC_DEBUG_printff(": returning %i dimensions\n", *num_dims);
     return names;        
 }
 
 
 static NclFDimRec *VDCGetDimInfo (void* therec, NclQuark dim_name_q)
 {
+    VDC_DEBUG_printff("(%s)\n", NrmQuarkToString(dim_name_q));
+
 	VDCRecord* rec = (VDCRecord*)therec;
     int i;
-
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCGetDimInfo(%s)...\n", NrmQuarkToString(dim_name_q));
-    #endif
 
     for (i=0; i<rec->numDimensions; i++) {
         if (dim_name_q == rec->dimensions[i].dim_name_quark) {
@@ -411,15 +443,13 @@ static NclFDimRec *VDCGetDimInfo (void* therec, NclQuark dim_name_q)
 
 static NclQuark *VDCGetAttNames (void* therec, int *num_atts)
 {	
+    VDC_DEBUG_printff("()\n");
+
 	VDCRecord* rec = (VDCRecord*)therec;
     int i;
 
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCGetAttNames...");
-    #endif
-
     NclQuark* names = (NclQuark*) NclMalloc(sizeof(NclQuark) * rec->numAtts);
-    if (names == NULL) {
+    if (rec->numAtts > 0 && names == NULL) {
         NhlPError(NhlFATAL,ENOMEM,NULL);
         return NULL;
     }
@@ -430,22 +460,17 @@ static NclQuark *VDCGetAttNames (void* therec, int *num_atts)
 
     *num_atts = rec->numAtts;
 
-    #ifdef VDC_DEBUG
-    fprintf(stderr, " returning %i atts\n", *num_atts);
-    #endif
-
+    VDC_DEBUG_printff(": returning %i attributes\n", *num_atts);
     return names;
 }
 
 
 static NclFAttRec* VDCGetAttInfo (void* therec, NclQuark att_name_q)
 {
+    VDC_DEBUG_printff("(\"%s\")\n", NrmQuarkToString(att_name_q));
+
 	VDCRecord* rec = (VDCRecord*)therec;
     int i;
-
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCGetAttInfo(\"%s\")... ", NrmQuarkToString(att_name_q));
-    #endif
 
     for (i=0; i<rec->numAtts; i++) {
         if (att_name_q == rec->globalAtts[i].att_name_quark) {
@@ -468,14 +493,12 @@ static NclFAttRec* VDCGetAttInfo (void* therec, NclQuark att_name_q)
 
 static NclQuark *VDCGetVarAttNames (void *therec , NclQuark thevar, int* num_atts)
 {
+    VDC_DEBUG_printff("(%s)\n", NrmQuarkToString(thevar));
+
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
     *num_atts = 0;
 	NclQuark *names_q = NULL;
-
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCGetVarAttNames(%s)...\n", NrmQuarkToString(thevar));
-    #endif
 
 	VDCBaseVar *v = VDCBaseVar_new();
 	int success = VDC_GetBaseVarInfo(p, NrmQuarkToString(thevar), v);
@@ -504,13 +527,10 @@ static NclQuark *VDCGetVarAttNames (void *therec , NclQuark thevar, int* num_att
 
 static NclFAttRec *VDCGetVarAttInfo (void *therec, NclQuark thevar, NclQuark theatt)
 {
+    VDC_DEBUG_printff("(%s, %s)\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	NclFAttRec *att = NULL; // (NclFAttRec*)NclMalloc((unsigned) sizeof(NclFAttRec));
-
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCGetVarAttInfo(%s, %s)...\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
-    #endif
 
 	if (theatt == NrmStringToQuark("C_Ratios")) {
 		att = (NclFAttRec*)NclMalloc(sizeof(NclFAttRec));
@@ -539,39 +559,14 @@ static NclFAttRec *VDCGetVarAttInfo (void *therec, NclQuark thevar, NclQuark the
 
 static NclFVarRec *VDCGetCoordInfo (void* therec, NclQuark thevar)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "VDCGetCoordInfo(\"%s\")...\n", NrmQuarkToString(thevar));
-    #endif
+    VDC_DEBUG_printff("(\"%s\")\n", NrmQuarkToString(thevar));
 	return(VDCGetVarInfo(therec, thevar));
 }
 
-void _temp_copy(float *i,float *o, int w, int h) {
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
-			o[y*w+x] = i[y*w+x];
-		}
-	}
-}
-
-int _ispowerof(long n, long x) {
-	if (x == 0) return 0;
-	while (x % n == 0)
-		x /= n;
-	return x == 1;
-}
-
-int _xPowY(int x, int y) {
-	int acc = 1;
-	while (y-- > 0)
-		acc *= x;
-	return acc;
-}
 
 static void *VDCReadVar (void* therec, NclQuark thevar, long* _start, long* _finish,long* _stride,void* storage)
 {
-#ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s('%s')\n", __FILE__, __LINE__, __func__, NrmQuarkToString(thevar));
-#endif
+	VDC_DEBUG_printff("('%s')\n", NrmQuarkToString(thevar));
 
 #define VDC_MAX_DIMS 5
 	VDCRecord *rec = (VDCRecord*)therec;
@@ -591,7 +586,7 @@ static void *VDCReadVar (void* therec, NclQuark thevar, long* _start, long* _fin
 
 			// If not time varying, add fake flat time dimension for convenience
 			if (!rec->variablesIsTimeVarying[i]) {
-				VDC_DEBUG_printf("Adding fake time variable\n");
+				VDC_DEBUG_printff(" Adding fake time variable\n");
 				for (int j = 0; j < numDims; j++) {
 					start [j+1] = _start [j];
 					finish[j+1] = _finish[j];
@@ -701,20 +696,15 @@ _strideEnd: ;
 
 static void *VDCReadCoord (void* therec, NclQuark thevar, long* start, long* finish,long* stride,void* storage)
 {
-#ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s('%s')\n", __FILE__, __LINE__, __func__, NrmQuarkToString(thevar));
-#endif
+    VDC_DEBUG_printff("('%s')\n", NrmQuarkToString(thevar));
 
 	return VDCReadVar(therec, thevar, start, finish,stride,storage);
 }
 
 static void *VDCReadAtt (void *therec,NclQuark theatt,void* storage)
 {
+    VDC_DEBUG_printff("(\"%s\") = ", NrmQuarkToString(theatt));
 	VDCRecord *rec = (VDCRecord*)therec;
-
-#ifdef VDC_DEBUG
-    fprintf(stderr, "VDCReadAtt(\"%s\") = ", NrmQuarkToString(theatt));
-#endif
 
     for (int i=0; i<rec->numAtts; i++) {
         if (theatt == rec->globalAtts[i].att_name_quark) {
@@ -744,9 +734,7 @@ static void *VDCReadAtt (void *therec,NclQuark theatt,void* storage)
 
 static void *VDCReadVarAtt (void * therec, NclQuark thevar, NclQuark theatt, void * storage)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s('%s', '%s')\n", __FILE__, __LINE__, __func__, NrmQuarkToString(thevar), NrmQuarkToString(theatt));
-    #endif
+    VDC_DEBUG_printff("('%s', '%s')\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
@@ -805,54 +793,168 @@ static void *VDCReadVarAtt (void * therec, NclQuark thevar, NclQuark theatt, voi
 		return storage;
 	}
 
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s Warning: '%s'->'%s' not found\n", __FILE__, __LINE__, __func__, NrmQuarkToString(thevar), NrmQuarkToString(theatt));
-    #endif
+    VDC_DEBUG_printff(" Warning: '%s'->'%s' not found\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	return NULL; // xt = INVALID
 }
 
 
 static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark theatt, void* data);
-
 static NhlErrorTypes VDCWriteAtt (void *therec, NclQuark theatt, void *data )
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s('%s')\n", __FILE__, __LINE__, __func__, NrmQuarkToString(theatt));
-    #endif
-
+    VDC_DEBUG_printff("('%s')\n", NrmQuarkToString(theatt));
 	return VDCWriteVarAtt(therec, NrmStringToQuark(""), theatt, data);
 }
 
 
 static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark theatt, void* data)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s('%s', '%s')\n", __FILE__, __LINE__, __func__, NrmQuarkToString(thevar), NrmQuarkToString(theatt));
-    #endif
+    VDC_DEBUG_printff("('%s', '%s')\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
+
+	int xt = VDC_GetAttType(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+
+	if (xt >= 0) {
+	}
 
 	printf("Not implemented\n");
+	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCWriteVarAtt: Attritube '%s'->'%s' does not exist.", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	return NhlFATAL;
 }
 
 
 static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,int is_unlimited)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s('%s', %li, %s)\n", __FILE__, __LINE__, __func__, NrmQuarkToString(thedim), size, is_unlimited?"True":"False");
-    #endif
+    VDC_DEBUG_printff("('%s', %li, %s)\n", NrmQuarkToString(thedim), size, is_unlimited?"True":"False");
 	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
 
-	printf("Not implemented\n");
+	if (is_unlimited) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddDim: VDC does not support dimensions of unlimited length."); // TODO VDC
+		return NhlFATAL;
+	}
+	if (size < 1) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddDim: dimension size must be greater than 0.");
+		return NhlFATAL;
+	}
+
+	if (VDC_DefineDimension(p, NrmQuarkToString(thedim), size) < 0) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddDim: failed to create dimension \"%s\".", NrmQuarkToString(thedim));
+		return NhlFATAL;
+	}
+
+	NclFDimRec *oldDims = rec->dimensions;
+	rec->dimensions = (NclFDimRec*)NclMalloc(sizeof(NclFDimRec) * (rec->numDimensions + 1));
+	memcpy(rec->dimensions, oldDims, sizeof(NclFDimRec) * rec->numDimensions);
+	NclFree(oldDims);
+
+	rec->dimensions[rec->numDimensions].dim_name_quark = thedim;
+	rec->dimensions[rec->numDimensions].dim_size = size;
+	rec->dimensions[rec->numDimensions].is_unlimited = is_unlimited;
+	rec->numDimensions++;
+
+	return NhlNOERROR;
+}
+
+
+static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes data_type, int n_dims, NclQuark *dim_names, long* dim_sizes)
+{
+    VDC_DEBUG_printff("('%s', %s, %i, [dim_names], [dim_sizes])\n", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims);
+	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
+
+	char **dims = (char **)malloc(sizeof(char*) * n_dims);
+	for (int i = 0; i < n_dims; i++) {
+		dims[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(dim_names[i])) + 1));
+		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
+	}
+	
+	VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, NULL, 0, "", _NCLDataTypeToVDCXType(data_type), 0); // TODO VDC add compression fileoption
+
+	for (int i = 0; i < n_dims; i++) free(dims[i]);
+	free(dims);
+
+	//int VDC_DefineDataVar(VDC *p, const char *varname, const char **dimnames, size_t dimnamesCount, const char **coordvars, size_t coordvarsCount, const char *units, int xtype, int compressed)
+	printf("NOT IMPLEMENTED\n");
 	return NhlFATAL;
+}
+
+
+static NhlErrorTypes VDCAddVarAtt (void *therec,NclQuark thevar, NclQuark theatt, NclBasicDataTypes data_type, int n_items, void * values);
+static NhlErrorTypes VDCAddAtt (void *therec,NclQuark theatt, NclBasicDataTypes data_type, int n_items, void * values)
+{
+    VDC_DEBUG_printff("('%s', %s, %i, <data>)\n", NrmQuarkToString(theatt), _NCLDataTypeToString(data_type), n_items);
+	return VDCAddVarAtt(therec, NrmStringToQuark(""), theatt, data_type, n_items, values);
+}
+
+
+static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theatt, NclBasicDataTypes data_type, int n_items, void * values)
+{
+    VDC_DEBUG_printff("('%s', '%s', %s, %i, <data>)\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToString(data_type), n_items);
+	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
+
+	void *valuesSansQuark;
+	if (data_type == NCL_string) {
+		valuesSansQuark = malloc(strlen(NrmQuarkToString(*(long*)values)) + 1);
+		strcpy((char *)valuesSansQuark, NrmQuarkToString(*(long*)values));
+		VDC_DEBUG_printff(": <data> is string \"%s\"", valuesSansQuark); // TODO VDC check
+	}
+	else valuesSansQuark = values;
+
+	VDC_DEBUG_printff(": Adding to VDC\n");
+	if (VDC_PutAtt(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToVDCXType(data_type), values, n_items) < 0) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVarAtt: failed to add variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+		return NhlFATAL;
+	}
+
+	if (data_type == NCL_string)
+		free(valuesSansQuark);
+
+	if (thevar == NrmStringToQuark("")) {
+		VDC_DEBUG_printff(": Adding to global atts in record\n");
+		NclFAttRec *oldAtts = rec->globalAtts;
+		long *oldAttsValues = rec->globalAttsValues;
+
+		rec->globalAtts = (NclFAttRec*)NclMalloc(sizeof(NclFAttRec) * (rec->numAtts + 1));
+		rec->globalAttsValues = NclMalloc(sizeof(long) * (rec->numAtts + 1));
+
+		memcpy(rec->globalAtts, oldAtts, sizeof(NclFAttRec) * rec->numAtts);
+		memcpy(rec->globalAttsValues, oldAttsValues, sizeof(long) * rec->numAtts);
+
+		NclFree(oldAtts);
+		NclFree(oldAttsValues);
+
+		rec->globalAtts[rec->numAtts].att_name_quark = theatt;
+		rec->globalAtts[rec->numAtts].data_type = data_type;
+		rec->globalAtts[rec->numAtts].num_elements = n_items;
+		rec->globalAttsValues[rec->numAtts] = *(long *)values; // TODO VDC do I need to copy? / multiple items
+
+		rec->numAtts++;
+	}
+
+	VDC_DEBUG_printff(": Done\n");
+	return NhlNOERROR;
+}
+
+
+static void *MapNclTypeToFormat (NclBasicDataTypes nclType)
+{
+	VDC_XType *ret = (VDC_XType *)NclMalloc(sizeof(VDC_XType));
+	*ret = _NCLDataTypeToVDCXType(nclType);
+	return ret;
+}
+
+
+static NclBasicDataTypes MapFormatTypeToNcl (void *type)
+{
+	return _VDCXTypeToNCLDataType(*(VDC_XType *)type);
 }
 
 
 static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTypes data_type, int n_items, void * values)
 {
-    #ifdef VDC_DEBUG
-    fprintf(stderr, "[%s:%i]%s('%s')\n", __FILE__, __LINE__, __func__, NrmQuarkToString(option));
-    #endif
+    VDC_DEBUG_printff("('%s')\n", NrmQuarkToString(option));
 
 	VDCRecord *rec = (VDCRecord*)therec;
 
@@ -860,9 +962,7 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 		int val = *(int*)values;
 		if (val >= -1) {
 			rec->levelOfDetail = val;
-			#ifdef VDC_DEBUG
-			fprintf(stderr, "[%s:%i]%s levelOfDetail = %i\n", __FILE__, __LINE__, __func__, rec->levelOfDetail);
-			#endif
+			VDC_DEBUG_printff(" levelOfDetail = %i\n", rec->levelOfDetail);
 		} else {
 	 		NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value cannot be less than -1",NrmQuarkToString(option));
 	 		return NhlWARNING;
@@ -876,6 +976,27 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 
 	return NhlNOERROR;
 }
+
+
+#define NULLFUNC(x) \
+	void NULL_##x (void) { \
+		printf("\n=======================================\nERROR: NULL VDC function %s called\n", #x); \
+		exit(1); \
+	}
+NULLFUNC(read_coord2)
+NULLFUNC(read_var2)
+NULLFUNC(VDCWriteCoord)
+NULLFUNC(write_coord2)
+NULLFUNC(VDCWriteVar)
+NULLFUNC(write_var2)
+NULLFUNC(VDCAddChunkDim)
+NULLFUNC(VDCRenameDim)
+NULLFUNC(VDCAddVarChunk)
+NULLFUNC(VDCAddVarChunkCache)
+NULLFUNC(VDCSetVarCompressLevel)
+NULLFUNC(VDCAddCoordVar)
+NULLFUNC(VDCDelAtt)
+NULLFUNC(VDCDelVarAtt)
 
 
 NclFormatFunctionRec VDCRec = {
@@ -893,41 +1014,36 @@ NclFormatFunctionRec VDCRec = {
 /* NclGetVarAttInfoFunc    get_var_att_info; */	VDCGetVarAttInfo,
 /* NclGetCoordInfoFunc     get_coord_info; */	VDCGetCoordInfo,
 /* NclReadCoordFunc        read_coord; */		VDCReadCoord,
-/* NclReadCoordFunc        read_coord; */		NULL,
+/* NclReadCoordFunc        read_coord; */		NULL_read_coord2,
 /* NclReadVarFunc          read_var; */			VDCReadVar,
-/* NclReadVarFunc          read_var; */			NULL,
+/* NclReadVarFunc          read_var; */			NULL_read_var2,
 /* NclReadAttFunc          read_att; */			VDCReadAtt,
 /* NclReadVarAttFunc       read_var_att; */		VDCReadVarAtt,
-/* NclWriteCoordFunc       write_coord; */		NULL,
-/* NclWriteCoordFunc       write_coord; */		NULL,
-/* NclWriteVarFunc         write_var; */		NULL,
-/* NclWriteVarFunc         write_var; */		NULL,
+/* NclWriteCoordFunc       write_coord; */		NULL_VDCWriteCoord,
+/* NclWriteCoordFunc       write_coord; */		NULL_write_coord2,
+/* NclWriteVarFunc         write_var; */		NULL_VDCWriteVar,
+/* NclWriteVarFunc         write_var; */		NULL_write_var2,
 /* NclWriteAttFunc         write_att; */		VDCWriteAtt,
-/* NclWriteVarAttFunc      write_var_att; */	VDCWriteVarAtt, // TODO VDC
-/* NclAddDimFunc           add_dim; */			VDCAddDim, // TODO VDC
-/* NclAddChunkDimFunc      add_chunk_dim; */	NULL,
-/* NclRenameDimFunc        rename_dim; */		NULL,
-/* NclAddVarFunc           add_var; */			NULL,
-/* NclAddVarChunkFunc      add_var_chunk; */	NULL,
-/* NclAddVarChunkCacheFunc add_var_chunk_cache; */	NULL,
-/* NclSetVarCompressLevelFunc set_var_compress_level; */ NULL,
-/* NclAddVarFunc           add_coord_var; */	NULL,
-/* NclAddAttFunc           add_att; */			NULL,
-/* NclAddVarAttFunc        add_var_att; */		NULL,
-/* NclMapFormatTypeToNcl   map_format_type_to_ncl; */	NULL,
-/* NclMapNclTypeToFormat   map_ncl_type_to_format; */	NULL,
-/* NclDelAttFunc           del_att; */			NULL,
-/* NclDelVarAttFunc        del_var_att; */		NULL,
+/* NclWriteVarAttFunc      write_var_att; */	VDCWriteVarAtt,
+/* NclAddDimFunc           add_dim; */			VDCAddDim,
+/* NclAddChunkDimFunc      add_chunk_dim; */	NULL_VDCAddChunkDim,
+/* NclRenameDimFunc        rename_dim; */		NULL_VDCRenameDim,
+/* NclAddVarFunc           add_var; */			VDCAddVar,
+/* NclAddVarChunkFunc      add_var_chunk; */	NULL_VDCAddVarChunk,
+/* NclAddVarChunkCacheFunc add_var_chunk_cache; */	NULL_VDCAddVarChunkCache,
+/* NclSetVarCompressLevelFunc set_var_compress_level; */ NULL_VDCSetVarCompressLevel,
+/* NclAddVarFunc           add_coord_var; */	NULL_VDCAddCoordVar,
+/* NclAddAttFunc           add_att; */			VDCAddAtt,
+/* NclAddVarAttFunc        add_var_att; */		VDCAddVarAtt,
+/* NclMapFormatTypeToNcl   map_format_type_to_ncl; */	MapFormatTypeToNcl,
+/* NclMapNclTypeToFormat   map_ncl_type_to_format; */	MapNclTypeToFormat,
+/* NclDelAttFunc           del_att; */			NULL_VDCDelAtt,
+/* NclDelVarAttFunc        del_var_att; */		NULL_VDCDelVarAtt,
 #include "NclGrpFuncs.null"
 /* NclSetOptionFunc        set_option;  */      VDCSetOption
 };
 
-NclFormatFunctionRecPtr VDCAddFileFormat 
-#if	NhlNeedProto
-(void)
-#else 
-()
-#endif
+NclFormatFunctionRecPtr VDCAddFileFormat (void)
 {	
 	return(&VDCRec);
 }

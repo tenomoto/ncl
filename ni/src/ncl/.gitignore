@@ -47,3 +47,4 @@ scanapi.c
 scanner.c
 y.tab.c
 y.tab.h
+tags
