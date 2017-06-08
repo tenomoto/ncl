@@ -807,20 +807,62 @@ static NhlErrorTypes VDCWriteAtt (void *therec, NclQuark theatt, void *data )
 }
 
 
-static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark theatt, void* data)
+static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark theatt, void* values)
 {
     VDC_DEBUG_printff("('%s', '%s')\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 
 	int xt = VDC_GetAttType(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+	if (xt < 0) {
+		NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCWriteVarAtt: Attritube '%s'->'%s' does not exist.", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+		return NhlFATAL;
+	}
+	NclBasicDataTypes data_type = _VDCXTypeToNCLDataType(xt);
 
-	if (xt >= 0) {
+	void *valuesSansQuark;
+	if (data_type == NCL_string) {
+		valuesSansQuark = malloc(strlen(NrmQuarkToString(*(long*)values)) + 1);
+		strcpy((char *)valuesSansQuark, NrmQuarkToString(*(long*)values));
+		VDC_DEBUG_printff(": <data> is string \"%s\"\n", valuesSansQuark); // TODO VDC check
+	}
+	else valuesSansQuark = values;
+
+	int n_items;
+	VDC_GetAtt_Count(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), n_items);
+
+	VDC_DEBUG_printff(": Writing to VDC\n");
+	if (VDC_PutAtt(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), xt, valuesSansQuark, n_items) < 0) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVarAtt: failed to write variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+		return NhlFATAL;
 	}
 
-	printf("Not implemented\n");
-	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCWriteVarAtt: Attritube '%s'->'%s' does not exist.", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
-	return NhlFATAL;
+	if (data_type == NCL_string)
+		free(valuesSansQuark);
+
+	if (thevar == NrmStringToQuark("")) {
+		int index;
+		for (int i = 0; i < rec->numAtts; i++) {
+			if (rec->globalAtts[i].att_name_quark == theatt) {
+				index = i;
+				break;
+			}
+		}
+		if (index == -1) {
+			VDC_DEBUG_printff(": Error: index was not set.\n");
+			NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVarAtt: failed to write variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+			return NhlFATAL;
+		}
+
+
+		VDC_DEBUG_printff(": Writing to global atts in record\n");
+		if (data_type == NCL_float || data_type == NCL_int)
+			rec->globalAttsValues[index] = *(int *)values; // TODO VDC do I need to copy? / multiple items
+		else
+			rec->globalAttsValues[index] = *(long *)values; // TODO VDC do I need to copy? / multiple items
+	}
+
+	return NhlNOERROR;
 }
 
 
@@ -922,7 +964,7 @@ static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theat
 	if (data_type == NCL_string) {
 		valuesSansQuark = malloc(strlen(NrmQuarkToString(*(long*)values)) + 1);
 		strcpy((char *)valuesSansQuark, NrmQuarkToString(*(long*)values));
-		VDC_DEBUG_printff(": <data> is string \"%s\"\n", valuesSansQuark); // TODO VDC check
+		VDC_DEBUG_printff(": <data> is string \"%s\"\n", valuesSansQuark);
 	}
 	else valuesSansQuark = values;
 
@@ -937,6 +979,7 @@ static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theat
 
 	if (thevar == NrmStringToQuark("")) {
 		VDC_DEBUG_printff(": Adding to global atts in record\n");
+
 		NclFAttRec *oldAtts = rec->globalAtts;
 		long *oldAttsValues = rec->globalAttsValues;
 
@@ -960,7 +1003,6 @@ static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theat
 		rec->numAtts++;
 	}
 
-	VDC_DEBUG_printff(": Done\n");
 	return NhlNOERROR;
 }
 
