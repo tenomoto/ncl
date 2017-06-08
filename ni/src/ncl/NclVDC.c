@@ -142,7 +142,7 @@ static NclQuark _VDCFixExt (NclQuark path)
 static void *VDCCreateFile (void *rec_, NclQuark path)
 {
     VDC_DEBUG_printff("(\"%s\")\n", NrmQuarkToString(path));
-	VDCRecord *rec = (VDCRecord*)rec_; // TODO VDC
+	VDCRecord *rec = (VDCRecord*)rec_;
 	path = _VDCFixExt(path);
 
 	VDC *p = VDC_new();
@@ -341,11 +341,13 @@ static void VDCFreeFileRec (void* therec)
     if (rec->globalAttsValues) NclFree(rec->globalAttsValues);
     if (rec->dimensions) NclFree(rec->dimensions);     
 
+	VDC_EndDefine(rec->dataSource);
     VDC_delete(rec->dataSource);
 
     NclFree(rec);
 	rec = NULL;
 
+    VDC_DEBUG_printff(": done.\n");
 	return;
 }
 
@@ -378,19 +380,18 @@ static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
     VDC_DEBUG_printff("()\n");	
     
 	VDCRecord *rec = (VDCRecord*)therec;
-    int i=0;
 
-    for (i=0; i<rec->numVariables; i++) {
+    for (int i = 0; i < rec->numVariables; i++) {
             if (var_name == rec->variables[i].var_name_quark) {
-                    int j;
                     NclFVarRec *ret = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec));
                     ret->var_name_quark = rec->variables[i].var_name_quark;
                     ret->var_full_name_quark = rec->variables[i].var_name_quark;
                     ret->var_real_name_quark = rec->variables[i].var_name_quark;
                     ret->data_type = rec->variables[i].data_type;
                     ret->num_dimensions = rec->variables[i].num_dimensions;
-                    for (j=0; j<ret->num_dimensions; j++)
+                    for (int j = 0; j < ret->num_dimensions; j++) {
                             ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
+					}
                     return ret;
             }
     }
@@ -874,9 +875,32 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 	for (int i = 0; i < n_dims; i++) free(dims[i]);
 	free(dims);
 
-	//int VDC_DefineDataVar(VDC *p, const char *varname, const char **dimnames, size_t dimnamesCount, const char **coordvars, size_t coordvarsCount, const char *units, int xtype, int compressed)
-	printf("NOT IMPLEMENTED\n");
-	return NhlFATAL;
+	NclFVarRec *oldVariables = rec->variables;
+	int *oldVariablesIsTimeVarying = rec->variablesIsTimeVarying;
+	rec->variables = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec) * (rec->numVariablesAndCoords + 1));
+	rec->variablesIsTimeVarying = (int*)NclMalloc(sizeof(int) * (rec->numVariables + 1));
+	VDCBaseVar *v = VDCBaseVar_new();
+
+	memcpy(rec->variables, oldVariables, sizeof(NclFVarRec) * rec->numVariables);
+	memcpy(&rec->variables[rec->numVariables + 1], &oldVariables[rec->numVariables], sizeof(NclFVarRec) * (rec->numVariablesAndCoords - rec->numVariables));
+	memcpy(rec->variablesIsTimeVarying, oldVariablesIsTimeVarying, sizeof(int) * rec->numVariables);
+
+	rec->variables[rec->numVariables].var_name_quark = thevar;
+	rec->variables[rec->numVariables].data_type = data_type;
+	rec->variablesIsTimeVarying[rec->numVariables] = VDC_IsTimeVarying(p, NrmQuarkToString(thevar));
+
+	assert(n_dims <= NCL_MAX_DIMENSIONS);
+	rec->variables[rec->numVariables].num_dimensions = n_dims;
+	for (int i = 0; i < n_dims; i++)
+		rec->variables[rec->numVariables].file_dim_num[i] = _dimensionNameToId(rec, NrmQuarkToString(dim_names[n_dims - i - 1]));
+
+	rec->numVariables++;
+	rec->numVariablesAndCoords++;
+
+	NclFree(oldVariables);
+	NclFree(oldVariablesIsTimeVarying);
+
+	return NhlNOERROR;
 }
 
 
@@ -898,12 +922,12 @@ static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theat
 	if (data_type == NCL_string) {
 		valuesSansQuark = malloc(strlen(NrmQuarkToString(*(long*)values)) + 1);
 		strcpy((char *)valuesSansQuark, NrmQuarkToString(*(long*)values));
-		VDC_DEBUG_printff(": <data> is string \"%s\"", valuesSansQuark); // TODO VDC check
+		VDC_DEBUG_printff(": <data> is string \"%s\"\n", valuesSansQuark); // TODO VDC check
 	}
 	else valuesSansQuark = values;
 
 	VDC_DEBUG_printff(": Adding to VDC\n");
-	if (VDC_PutAtt(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToVDCXType(data_type), values, n_items) < 0) {
+	if (VDC_PutAtt(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToVDCXType(data_type), valuesSansQuark, n_items) < 0) {
 	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVarAtt: failed to add variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 		return NhlFATAL;
 	}
@@ -928,7 +952,10 @@ static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theat
 		rec->globalAtts[rec->numAtts].att_name_quark = theatt;
 		rec->globalAtts[rec->numAtts].data_type = data_type;
 		rec->globalAtts[rec->numAtts].num_elements = n_items;
-		rec->globalAttsValues[rec->numAtts] = *(long *)values; // TODO VDC do I need to copy? / multiple items
+		if (data_type == NCL_float || data_type == NCL_int)
+			rec->globalAttsValues[rec->numAtts] = *(int *)values; // TODO VDC do I need to copy? / multiple items
+		else
+			rec->globalAttsValues[rec->numAtts] = *(long *)values; // TODO VDC do I need to copy? / multiple items
 
 		rec->numAtts++;
 	}
@@ -978,25 +1005,31 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 }
 
 
-#define NULLFUNC(x) \
+#ifdef VDC_DEBUG
+#define _NULLFUNC(x) \
 	void NULL_##x (void) { \
 		printf("\n=======================================\nERROR: NULL VDC function %s called\n", #x); \
 		exit(1); \
 	}
-NULLFUNC(read_coord2)
-NULLFUNC(read_var2)
-NULLFUNC(VDCWriteCoord)
-NULLFUNC(write_coord2)
-NULLFUNC(VDCWriteVar)
-NULLFUNC(write_var2)
-NULLFUNC(VDCAddChunkDim)
-NULLFUNC(VDCRenameDim)
-NULLFUNC(VDCAddVarChunk)
-NULLFUNC(VDCAddVarChunkCache)
-NULLFUNC(VDCSetVarCompressLevel)
-NULLFUNC(VDCAddCoordVar)
-NULLFUNC(VDCDelAtt)
-NULLFUNC(VDCDelVarAtt)
+#define NULLFUNC(x) NULL_##x
+#else
+#define _NULLFUNC(x)
+#define NULLFUNC(x) NULL
+#endif
+_NULLFUNC(read_coord2)
+_NULLFUNC(read_var2)
+_NULLFUNC(VDCWriteCoord)
+_NULLFUNC(write_coord2)
+_NULLFUNC(VDCWriteVar)
+_NULLFUNC(write_var2)
+_NULLFUNC(VDCAddChunkDim)
+_NULLFUNC(VDCRenameDim)
+_NULLFUNC(VDCAddVarChunk)
+_NULLFUNC(VDCAddVarChunkCache)
+_NULLFUNC(VDCSetVarCompressLevel)
+_NULLFUNC(VDCAddCoordVar)
+_NULLFUNC(VDCDelAtt)
+_NULLFUNC(VDCDelVarAtt)
 
 
 NclFormatFunctionRec VDCRec = {
@@ -1014,31 +1047,31 @@ NclFormatFunctionRec VDCRec = {
 /* NclGetVarAttInfoFunc    get_var_att_info; */	VDCGetVarAttInfo,
 /* NclGetCoordInfoFunc     get_coord_info; */	VDCGetCoordInfo,
 /* NclReadCoordFunc        read_coord; */		VDCReadCoord,
-/* NclReadCoordFunc        read_coord; */		NULL_read_coord2,
+/* NclReadCoordFunc        read_coord; */		NULLFUNC(read_coord2),
 /* NclReadVarFunc          read_var; */			VDCReadVar,
-/* NclReadVarFunc          read_var; */			NULL_read_var2,
+/* NclReadVarFunc          read_var; */			NULLFUNC(read_var2),
 /* NclReadAttFunc          read_att; */			VDCReadAtt,
 /* NclReadVarAttFunc       read_var_att; */		VDCReadVarAtt,
-/* NclWriteCoordFunc       write_coord; */		NULL_VDCWriteCoord,
-/* NclWriteCoordFunc       write_coord; */		NULL_write_coord2,
-/* NclWriteVarFunc         write_var; */		NULL_VDCWriteVar,
-/* NclWriteVarFunc         write_var; */		NULL_write_var2,
+/* NclWriteCoordFunc       write_coord; */		NULLFUNC(VDCWriteCoord),
+/* NclWriteCoordFunc       write_coord; */		NULLFUNC(write_coord2),
+/* NclWriteVarFunc         write_var; */		NULLFUNC(VDCWriteVar),
+/* NclWriteVarFunc         write_var; */		NULLFUNC(write_var2),
 /* NclWriteAttFunc         write_att; */		VDCWriteAtt,
 /* NclWriteVarAttFunc      write_var_att; */	VDCWriteVarAtt,
 /* NclAddDimFunc           add_dim; */			VDCAddDim,
-/* NclAddChunkDimFunc      add_chunk_dim; */	NULL_VDCAddChunkDim,
-/* NclRenameDimFunc        rename_dim; */		NULL_VDCRenameDim,
+/* NclAddChunkDimFunc      add_chunk_dim; */	NULLFUNC(VDCAddChunkDim),
+/* NclRenameDimFunc        rename_dim; */		NULLFUNC(VDCRenameDim),
 /* NclAddVarFunc           add_var; */			VDCAddVar,
-/* NclAddVarChunkFunc      add_var_chunk; */	NULL_VDCAddVarChunk,
-/* NclAddVarChunkCacheFunc add_var_chunk_cache; */	NULL_VDCAddVarChunkCache,
-/* NclSetVarCompressLevelFunc set_var_compress_level; */ NULL_VDCSetVarCompressLevel,
-/* NclAddVarFunc           add_coord_var; */	NULL_VDCAddCoordVar,
+/* NclAddVarChunkFunc      add_var_chunk; */	NULLFUNC(VDCAddVarChunk),
+/* NclAddVarChunkCacheFunc add_var_chunk_cache; */	NULLFUNC(VDCAddVarChunkCache),
+/* NclSetVarCompressLevelFunc set_var_compress_level; */ NULLFUNC(VDCSetVarCompressLevel),
+/* NclAddVarFunc           add_coord_var; */	NULLFUNC(VDCAddCoordVar),
 /* NclAddAttFunc           add_att; */			VDCAddAtt,
 /* NclAddVarAttFunc        add_var_att; */		VDCAddVarAtt,
 /* NclMapFormatTypeToNcl   map_format_type_to_ncl; */	MapFormatTypeToNcl,
 /* NclMapNclTypeToFormat   map_ncl_type_to_format; */	MapNclTypeToFormat,
-/* NclDelAttFunc           del_att; */			NULL_VDCDelAtt,
-/* NclDelVarAttFunc        del_var_att; */		NULL_VDCDelVarAtt,
+/* NclDelAttFunc           del_att; */			NULLFUNC(VDCDelAtt),
+/* NclDelVarAttFunc        del_var_att; */		NULLFUNC(VDCDelVarAtt),
 #include "NclGrpFuncs.null"
 /* NclSetOptionFunc        set_option;  */      VDCSetOption
 };
