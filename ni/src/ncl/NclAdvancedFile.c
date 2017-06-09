@@ -4790,20 +4790,15 @@ static struct _NclMultiDValDataRec* MyAdvancedFileReadVarValue(NclFile infile, N
 
                 if(1 < compnode->nvals)
                 {
-                    i = n_dims_output;
-                    (dim_info)[i].dim_num = i;
-                    (dim_info)[i].dim_quark = compnode->name;
-                    if(NCL_string == compnode->type)
-                    {
-                        (dim_info)[i].dim_size = 1;
-                        output_dim_sizes[i] = 1;
-                    }
-                    else
-                    {
-                        (dim_info)[i].dim_size = (ng_size_t)compnode->nvals;
-                        output_dim_sizes[i] = compnode->nvals;
-                    }
-                    ++n_dims_output;
+			if (compnode->dimsizes != NULL) {
+				for (i = 0; i < compnode->rank; i++) {
+					(dim_info)[i+n_dims_output].dim_num = n_dims_output + i;
+					(dim_info)[i+n_dims_output].dim_quark = -1;
+					(dim_info)[i+n_dims_output].dim_size = compnode->dimsizes[i];
+					output_dim_sizes[i+n_dims_output] = compnode->dimsizes[i];
+				}
+			}
+			n_dims_output += compnode->rank;
                 }
             }
             else
@@ -6146,9 +6141,10 @@ static NhlErrorTypes AdvancedFileAddVar(NclFile infile, NclQuark varname,
 		    if (udt_node != NULL) {
 			    switch (udt_node->ncl_class) {
 			    case NCL_UDT_compound:
+				    /* -1 for the n_mems argument means the type is already defined */
 				    ret = (*thefile->advancedfile.format_funcs->add_compound)
 					    ((void *)thefile->advancedfile.grpnode, type, varname,
-					     n_dims, dimnames,0, NULL, NULL, NULL);
+					     n_dims, dimnames,-1, NULL, NULL, NULL);
 				    break;
 			    default:
 				    break;

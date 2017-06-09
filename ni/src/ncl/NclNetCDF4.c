@@ -343,7 +343,7 @@ NclFileUDTNode *_NC4_add_udt(NclFileUDTRecord **rootudtrec,
                   int gid, int uid, NclQuark name,
                   NclUDTType ncl_class, nc_type base_nc_type,
                   size_t size, size_t nfields,
-                  NclQuark *mem_name, NclBasicDataTypes *mem_type)
+		  NclQuark *mem_name, NclBasicDataTypes *mem_type)
 {
     NclFileUDTRecord *udtrec = *rootudtrec;
     NclFileUDTNode   *udtnode;
@@ -1389,11 +1389,21 @@ NclMultiDValData get_nc4_compoundlist(NclFileVarNode *varnode, int varid, size_t
 	field_nvals = compnode->nvals * nvals;
 	field_ndims = ndims;
 	if (compnode->rank > 0) {
-		for (i = ndims; i < ndims + compnode->rank; i++) {  /* really only allowing for 1-d values now */
-			dim_rec[i].dim_quark = -1;
-			dim_rec[i].dim_num = i;
-			dim_rec[i].dim_size = compnode->nvals;
-			dimsizes[i] = compnode->nvals;
+		if (compnode->dimsizes != NULL) {
+			for (i = 0; i < compnode->rank; i++) {
+				dim_rec[ndims+  i].dim_quark = -1;
+				dim_rec[ndims + i].dim_num = i;
+				dim_rec[ndims + i].dim_size = compnode->dimsizes[i];
+				dimsizes[ndims + i] = compnode->dimsizes[i];
+			}
+		}
+		else {
+			for (i = ndims; i < ndims + compnode->rank; i++) { 
+				dim_rec[i].dim_quark = -1;
+				dim_rec[i].dim_num = i;
+				dim_rec[i].dim_size = compnode->nvals;
+				dimsizes[i] = compnode->nvals;
+			}
 		}
 		field_ndims = ndims + compnode->rank;
 	}
@@ -6776,177 +6786,177 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
     int i;
     NclListObjList *list_item;
     int dim_size;
-    NclFileUDTNode *udtnode;
+    NclFileUDTNode *udtnode = NULL;
 
-    /* If var_name is NrmNULLQUARK this routine creates only the type; otherwise it creates both the type 
-       and a variable */
+    /* If var_name is NrmNULLQUARK this routine creates only the type; if n_mems is set to -1, then
+       it assumes the type (compound_name) is already defined and just creates the variable;
+       otherwise it creates both the type and the variable */
 
-  /*
-   *fprintf(stderr, "\nEnter NC4AddCompound, file: %s, line: %d\n", __FILE__, __LINE__);
-   *fprintf(stderr, "\tcompound_name: <%s>, var_name: <%s>\n",
-   *                 NrmQuarkToString(compound_name), NrmQuarkToString(var_name));
-   */
+    if (n_mems == -1) {
+	    udtnode = _NclAdvancedGetUserTypeNode(grpnode,compound_name,0);
+	    nc_compound_type_id = udtnode->id;
+	    n_mems = udtnode->n_fields;
+	    compound_length = udtnode->size;
+    }
+    else {
+	    udt_mem_name = (NclQuark *)NclCalloc(n_mems, sizeof(NclQuark));
+	    assert(udt_mem_name);
+	    udt_mem_type = (NclBasicDataTypes *)NclCalloc(n_mems, sizeof(NclBasicDataTypes));
+	    assert(udt_mem_type);
 
-    udt_mem_name = (NclQuark *)NclCalloc(n_mems, sizeof(NclQuark));
-    assert(udt_mem_name);
-    udt_mem_type = (NclBasicDataTypes *)NclCalloc(n_mems, sizeof(NclBasicDataTypes));
-    assert(udt_mem_type);
+	    mem_nc_type = (nc_type **)NclCalloc(n_mems, sizeof(NclBasicDataTypes *));
+	    assert(mem_nc_type);
 
-    mem_nc_type = (nc_type **)NclCalloc(n_mems, sizeof(NclBasicDataTypes *));
-    assert(mem_nc_type);
-
-    mem_offset = (size_t *)NclCalloc(n_mems, sizeof(size_t));
-    assert(mem_offset);
+	    mem_offset = (size_t *)NclCalloc(n_mems, sizeof(size_t));
+	    assert(mem_offset);
     
-    list_item = mem_size_list->list.first;
-    list_var = (NclVar)_NclGetObj(list_item->obj_id);
-    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
-    if (list_md->multidval.data_type != NCL_int) {
-            NHLPERROR((NhlFATAL, NhlEUNKNOWN,
-                "_NclIFileCompoundTypeDef: the size_list must contain integers only\n"));
-            return(NhlFATAL);
+	    list_item = mem_size_list->list.first;
+	    list_var = (NclVar)_NclGetObj(list_item->obj_id);
+	    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
+	    if (list_md->multidval.data_type != NCL_int) {
+		    NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+			       "_NclIFileCompoundTypeDef: the size_list must contain integers only\n"));
+		    return(NhlFATAL);
+	    }
+	    mem_size = 1;
+	    for (i = 0; i < list_md->multidval.totalelements; i++)
+		    mem_size *= ((int*) list_md->multidval.val)[i];
+	    for(n = 0; n < n_mems; n++)
+	    {
+		    udt_mem_name[n] = mem_name[n];
+		    udt_mem_type[n] = _nameToNclBasicDataType(mem_type[n]);
+
+		    mem_nc_type[n] = NC4MapFromNcl(udt_mem_type[n]);
+
+		    if(0 == n) {
+			    mem_offset[n] = 0;
+		    }
+		    else
+		    {
+			    mem_offset[n] = mem_offset[n-1] + component_size;
+		    }
+
+
+		    component_size = get_sizeof(mem_size, _NclSizeOf(udt_mem_type[n]));
+		    compound_length += component_size;
+
+		    list_item = list_item->next;
+		    if (list_item) {
+			    list_var = (NclVar)_NclGetObj(list_item->obj_id);
+			    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
+			    if (list_md->multidval.data_type != NCL_int) {
+				    NHLPERROR((NhlFATAL, NhlEUNKNOWN,
+					       "_NclIFileCompoundTypeDef: the size_list must contain integers only\n"));
+				    return(NhlFATAL);
+			    }
+			    mem_size = 1;
+			    for (i = 0; i < list_md->multidval.totalelements; i++)
+				    mem_size *= ((int*) list_md->multidval.val)[i];
+		    }
+		    /*
+		     *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
+		     *fprintf(stderr, "\tmem_size[%d] = %d\n", n, mem_size[n]);
+		     *fprintf(stderr, "\tmem: %d, name: <%s>, type: <%s>, size: %ld, offset: %ld\n",
+		     *                 n, NrmQuarkToString(mem_name[n]), NrmQuarkToString(mem_type[n]),
+		     *                 (long)component_size, (long)mem_offset[n]);
+		     */
+	    }
+
+	    /*
+	     *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
+	     *fprintf(stderr, "\tcompound_length = %d\n", compound_length);
+	     */
+
+	    nc_ret = nc_def_compound(grpnode->gid, compound_length,
+				     NrmQuarkToString(compound_name),
+				     &nc_compound_type_id);
+
+	    if(NC_NOERR != nc_ret)
+		    check_err(nc_ret, __LINE__, __FILE__);
+
+	    udtnode = _NC4_add_udt(&(grpnode->udt_rec),
+				   grpnode->gid, nc_compound_type_id, compound_name,
+				   NCL_UDT_compound, NC_COMPOUND,
+				   compound_length, n_mems, udt_mem_name, udt_mem_type);
+
+	    /*
+	     *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
+	     *fprintf(stderr, "\tgrpnode->gid = %d\n", grpnode->gid);
+	     *fprintf(stderr, "\tcompound_name: <%s>\n", NrmQuarkToString(compound_name));
+	     *fprintf(stderr, "\tnc_compound_type_id = %d\n", nc_compound_type_id);
+	     */
+
+	    list_item = mem_size_list->list.first;
+	    list_var = (NclVar)_NclGetObj(list_item->obj_id);
+	    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
+	    n_list_dims = list_md->multidval.totalelements;
+	    mem_size = 1;
+	    for (i = 0; i < list_md->multidval.totalelements; i++)
+		    mem_size *= ((int*) list_md->multidval.val)[i];
+
+	    for(n = 0; n < n_mems; n++)
+	    {
+		    /*
+		     *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
+		     *fprintf(stderr, "\tmem_offset[%d] = %d\n", n, mem_offset[n]);
+		     */
+
+		    tmp_nc_type = mem_nc_type[n];
+		    if(mem_size > 1)
+		    {
+			    /*
+			     *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
+			     *fprintf(stderr, "\tarray component nc_type = %d, NC_INT = %d\n", *tmp_nc_type, NC_INT);
+			     *fprintf(stderr, "\tarray component mem_size[%d] = %d\n", n, mem_size[n]);
+			     *fprintf(stderr, "\tarray component mem_name[%d]: <%s>\n",
+			     *                   n, NrmQuarkToString(mem_name[n]));
+			     */
+
+			    for (i = 0; i < n_list_dims; i++)
+				    tmp_dims[i] = ((int*)list_md->multidval.val)[i];
+			    nc_insert_array_compound(grpnode->gid, nc_compound_type_id,
+						     NrmQuarkToString(mem_name[n]),
+						     mem_offset[n], *tmp_nc_type, n_list_dims, tmp_dims);
+			    udtnode->fields[n].n_dims = n_list_dims;
+			    udtnode->fields[n].dim_sizes = NclMalloc(n_list_dims * sizeof(ng_size_t));
+			    for (i = 0; i < n_list_dims; i++)
+				    udtnode->fields[n].dim_sizes[i] = (ng_size_t) tmp_dims[i];
+		    }
+		    else
+		    {
+			    /*
+			     *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
+			     *fprintf(stderr, "\tsimple component nc_type = %d, NC_INT = %d\n", *tmp_nc_type, NC_INT);
+			     *fprintf(stderr, "\tsimple component mem_size[%d] = %d\n", n, mem_size[n]);
+			     *fprintf(stderr, "\tsimple component mem_name[%d]: <%s>\n",
+			     *                   n, NrmQuarkToString(mem_name[n]));
+			     */
+
+			    nc_insert_compound(grpnode->gid, nc_compound_type_id,
+					       NrmQuarkToString(mem_name[n]),
+					       mem_offset[n], *tmp_nc_type);
+
+			    udtnode->fields[n].n_dims = 1;
+			    udtnode->fields[n].dim_sizes = NclMalloc(sizeof(ng_size_t));
+			    udtnode->fields[n].dim_sizes[0] = 1;
+		    }
+		    udtnode->fields[n].offset = mem_offset[n];
+		    list_item = list_item->next;
+		    if (list_item) {
+			    list_var = (NclVar)_NclGetObj(list_item->obj_id);
+			    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
+			    n_list_dims = list_md->multidval.totalelements;
+			    mem_size = 1;
+			    for (i = 0; i < list_md->multidval.totalelements; i++)
+				    mem_size *= ((int*) list_md->multidval.val)[i];
+		    }
+	    }
+
+	    if (var_name == NrmNULLQUARK) {
+		    udtnode = NULL;
+		    goto CLEANUP;
+	    }
     }
-    mem_size = 1;
-    for (i = 0; i < list_md->multidval.totalelements; i++)
-	    mem_size *= ((int*) list_md->multidval.val)[i];
-    for(n = 0; n < n_mems; n++)
-    {
-        udt_mem_name[n] = mem_name[n];
-        udt_mem_type[n] = _nameToNclBasicDataType(mem_type[n]);
-
-        mem_nc_type[n] = NC4MapFromNcl(udt_mem_type[n]);
-
-        if(0 == n) {
-           mem_offset[n] = 0;
-	}
-        else
-        {
-           mem_offset[n] = mem_offset[n-1] + component_size;
-        }
-
-
-        component_size = get_sizeof(mem_size, _NclSizeOf(udt_mem_type[n]));
-        compound_length += component_size;
-
-	list_item = list_item->next;
-	if (list_item) {
-		list_var = (NclVar)_NclGetObj(list_item->obj_id);
-		list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
-		if (list_md->multidval.data_type != NCL_int) {
-			NHLPERROR((NhlFATAL, NhlEUNKNOWN,
-				   "_NclIFileCompoundTypeDef: the size_list must contain integers only\n"));
-			return(NhlFATAL);
-		}
-		mem_size = 1;
-		for (i = 0; i < list_md->multidval.totalelements; i++)
-			mem_size *= ((int*) list_md->multidval.val)[i];
-	}
-      /*
-       *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-       *fprintf(stderr, "\tmem_size[%d] = %d\n", n, mem_size[n]);
-       *fprintf(stderr, "\tmem: %d, name: <%s>, type: <%s>, size: %ld, offset: %ld\n",
-       *                 n, NrmQuarkToString(mem_name[n]), NrmQuarkToString(mem_type[n]),
-       *                 (long)component_size, (long)mem_offset[n]);
-       */
-    }
-
-  /*
-   *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-   *fprintf(stderr, "\tcompound_length = %d\n", compound_length);
-   */
-
-    nc_ret = nc_def_compound(grpnode->gid, compound_length,
-                             NrmQuarkToString(compound_name),
-                             &nc_compound_type_id);
-
-    if(NC_NOERR != nc_ret)
-        check_err(nc_ret, __LINE__, __FILE__);
-
-    udtnode = _NC4_add_udt(&(grpnode->udt_rec),
-			   grpnode->gid, nc_compound_type_id, compound_name,
-			   NCL_UDT_compound, NC_COMPOUND,
-			   compound_length, n_mems, udt_mem_name, udt_mem_type);
-
-  /*
-   *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-   *fprintf(stderr, "\tgrpnode->gid = %d\n", grpnode->gid);
-   *fprintf(stderr, "\tcompound_name: <%s>\n", NrmQuarkToString(compound_name));
-   *fprintf(stderr, "\tnc_compound_type_id = %d\n", nc_compound_type_id);
-   */
-
-    list_item = mem_size_list->list.first;
-    list_var = (NclVar)_NclGetObj(list_item->obj_id);
-    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
-    n_list_dims = list_md->multidval.totalelements;
-    mem_size = 1;
-    for (i = 0; i < list_md->multidval.totalelements; i++)
-	    mem_size *= ((int*) list_md->multidval.val)[i];
-
-    for(n = 0; n < n_mems; n++)
-    {
-      /*
-       *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-       *fprintf(stderr, "\tmem_offset[%d] = %d\n", n, mem_offset[n]);
-       */
-
-        tmp_nc_type = mem_nc_type[n];
-	if(mem_size > 1)
-        {
-          /*
-           *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-           *fprintf(stderr, "\tarray component nc_type = %d, NC_INT = %d\n", *tmp_nc_type, NC_INT);
-           *fprintf(stderr, "\tarray component mem_size[%d] = %d\n", n, mem_size[n]);
-           *fprintf(stderr, "\tarray component mem_name[%d]: <%s>\n",
-           *                   n, NrmQuarkToString(mem_name[n]));
-           */
-
-	    for (i = 0; i < n_list_dims; i++)
-		    tmp_dims[i] = ((int*)list_md->multidval.val)[i];
-            nc_insert_array_compound(grpnode->gid, nc_compound_type_id,
-                                     NrmQuarkToString(mem_name[n]),
-                                     mem_offset[n], *tmp_nc_type, n_list_dims, tmp_dims);
-	    udtnode->fields[n].n_dims = n_list_dims;
-	    udtnode->fields[n].dim_sizes = NclMalloc(n_list_dims * sizeof(ng_size_t));
-	    for (i = 0; i < n_list_dims; i++)
-		    udtnode->fields[n].dim_sizes[i] = (ng_size_t) tmp_dims[i];
-        }
-        else
-        {
-          /*
-           *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-           *fprintf(stderr, "\tsimple component nc_type = %d, NC_INT = %d\n", *tmp_nc_type, NC_INT);
-           *fprintf(stderr, "\tsimple component mem_size[%d] = %d\n", n, mem_size[n]);
-           *fprintf(stderr, "\tsimple component mem_name[%d]: <%s>\n",
-           *                   n, NrmQuarkToString(mem_name[n]));
-           */
-
-            nc_insert_compound(grpnode->gid, nc_compound_type_id,
-                               NrmQuarkToString(mem_name[n]),
-                               mem_offset[n], *tmp_nc_type);
-
-	    udtnode->fields[n].n_dims = 1;
-	    udtnode->fields[n].dim_sizes = NclMalloc(sizeof(ng_size_t));
-	    udtnode->fields[n].dim_sizes[0] = 1;
-        }
-	list_item = list_item->next;
-	if (list_item) {
-		list_var = (NclVar)_NclGetObj(list_item->obj_id);
-		list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
-		n_list_dims = list_md->multidval.totalelements;
-		mem_size = 1;
-		for (i = 0; i < list_md->multidval.totalelements; i++)
-			mem_size *= ((int*) list_md->multidval.val)[i];
-	}
-    }
-
-    _NC4_add_udt(&(grpnode->udt_rec),
-                  grpnode->gid, nc_compound_type_id, compound_name,
-                  NCL_UDT_compound, NC_COMPOUND,
-                  compound_length, n_mems, udt_mem_name, udt_mem_type);
-
-    if (var_name == NrmNULLQUARK) 
-	    goto CLEANUP;
-
     if(n_dims)
     {
         NclFileDimNode   *dimnode = NULL;
@@ -6987,37 +6997,58 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
             comp_rec->xtype = nc_compound_type_id;
             comp_rec->base_nc_type = nc_compound_type_id;
 
+	    if (! udtnode) {
+		    list_item = mem_size_list->list.first;
+		    list_var = (NclVar)_NclGetObj(list_item->obj_id);
+		    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
+		    n_list_dims = list_md->multidval.totalelements;
+		    for(n = 0; n < n_mems; n++)
+		    {
+			    compnode = &(comp_rec->compnode[n]);
 
-	    list_item = mem_size_list->list.first;
-	    list_var = (NclVar)_NclGetObj(list_item->obj_id);
-	    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
-	    n_list_dims = list_md->multidval.totalelements;
-            for(n = 0; n < n_mems; n++)
-            {
-                compnode = &(comp_rec->compnode[n]);
+			    compnode->name = udt_mem_name[n];
+			    compnode->type = udt_mem_type[n];
+			    compnode->the_nc_type = *(mem_nc_type[n]);
+			    compnode->offset = mem_offset[n];
+			    compnode->rank = 1;
+			    compnode->nvals = list_md->multidval.totalelements;
+			    if (n_list_dims > 1) {
+				    compnode->dimsizes = NclMalloc(sizeof(int) * n_list_dims);
+				    for (i = 0; i < n_list_dims; i++) {
+					    compnode->dimsizes[i] = ((int*)list_md->multidval.val)[i];
+				    }
+			    }
+			    list_item = list_item->next;
+			    if (list_item) {
+				    list_var = (NclVar)_NclGetObj(list_item->obj_id);
+				    list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
+				    n_list_dims = list_md->multidval.totalelements;
+			    }
+			    compnode->value = NULL;
+		    }
+	    }
+	    else {
+		    for(n = 0; n < n_mems; n++) {
+			    compnode = &(comp_rec->compnode[n]);
 
-                compnode->name = udt_mem_name[n];
-                compnode->type = udt_mem_type[n];
-                compnode->the_nc_type = *(mem_nc_type[n]);
-                compnode->offset = mem_offset[n];
-                compnode->rank = 1;
-                compnode->nvals = list_md->multidval.totalelements;
-		if (n_list_dims > 1) {
-			compnode->dimsizes = NclMalloc(sizeof(int) * n_list_dims);
-			for (i = 0; i < n_list_dims; i++) {
-				compnode->dimsizes[i] = ((int*)list_md->multidval.val)[i];
-			}
-		}
-		list_item = list_item->next;
-		if (list_item) {
-			list_var = (NclVar)_NclGetObj(list_item->obj_id);
-			list_md = (NclMultiDValData)_NclGetObj(list_var->var.thevalue_id);
-			n_list_dims = list_md->multidval.totalelements;
-		}
-                compnode->value = NULL;
-            }
-
+			    compnode->name = udtnode->fields[n].field_name;
+			    compnode->type = udtnode->fields[n].field_type;
+			    compnode->the_nc_type = *(nc_type*)(NC4MapFromNcl(udtnode->fields[n].field_type));
+			    compnode->offset = udtnode->fields[n].offset;
+			    compnode->rank = udtnode->fields[n].n_dims;
+			    compnode->nvals = 1;
+			    compnode->dimsizes = NclMalloc(sizeof(int) * compnode->rank);
+			    for (i = 0; i < compnode->rank; i++) {
+				    compnode->dimsizes[i] = udtnode->fields[n].dim_sizes[i];
+				    compnode->nvals *= compnode->dimsizes[i];
+			    }
+			    compnode->value = NULL;
+		    }
+		    
+	    }
             varnode->comprec = comp_rec;
+	    varnode->udt_type = NCL_UDT_compound;
+	    varnode->udt_type_node = udtnode;
         }
 
         NclFree(dim_size);
@@ -7025,16 +7056,18 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
     }
 
 CLEANUP:
-    NclFree(udt_mem_name);
-    NclFree(udt_mem_type);
-    NclFree(mem_offset);
+    if (! udtnode) {
+	    NclFree(udt_mem_name);
+	    NclFree(udt_mem_type);
+	    NclFree(mem_offset);
 
-    for(n = 0; n < n_mems; n++)
-    {
-        NclFree(mem_nc_type[n]);
+	    for(n = 0; n < n_mems; n++)
+	    {
+		    NclFree(mem_nc_type[n]);
+	    }
+	    
+	    NclFree(mem_nc_type);
     }
-
-    NclFree(mem_nc_type);
 
   /*
    *fprintf(stderr, "Leave NC4AddCompound, file: %s, line: %d\n\n", __FILE__, __LINE__);
