@@ -30,55 +30,19 @@ extern "C" {
 #include "NclBuiltIns.h"
 #include "MathFuncs.h"
 #include "HLUFunctions.h"
-extern NhlErrorTypes _NclILoadScript(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclICreateFile(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclISetFileOption(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIshorttoint(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIushorttoint(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclILoadScript(void);
+extern NhlErrorTypes _NclICreateFile(void);
+extern NhlErrorTypes _NclISetFileOption(void);
+extern NhlErrorTypes _NclIshorttoint(void);
+extern NhlErrorTypes _NclIushorttoint(void);
 
-extern NhlErrorTypes _NclIAddFiles(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIAddFiles(void);
 
-extern NhlErrorTypes _NclIGetFileGroups(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIGetFileGroups(void);
 
-extern NhlErrorTypes _NclIGetGroupVars(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIGetGroupVars(void);
 
-extern NhlErrorTypes    _NclIFileIsPresent(
-# if    NhlNeedProto
-void
-# endif /* NhlNeedProto */
-);
+extern NhlErrorTypes    _NclIFileIsPresent(void);
 
 extern NhlErrorTypes _NclIFileExists(void);
 
@@ -89,48 +53,16 @@ extern NhlErrorTypes _NclIGetFileCompressionLevel(void);
 
 extern NhlErrorTypes _NclIGetFileVersion(void);
 
-extern NhlErrorTypes    _NclIGetFileDimsizes(
-# if    NhlNeedProto
-void
-# endif /*NhlNeedProto */
-);
+extern NhlErrorTypes    _NclIGetFileDimsizes(void);
 
-extern NhlErrorTypes    _NclIGetFileVarTypes(
-# if    NhlNeedProto
-void
-# endif /* NhlNeedProto */
-);
+extern NhlErrorTypes    _NclIGetFileVarTypes(void);
 
-extern NhlErrorTypes _NclIprintFileVarSummary(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIprintVarSummary(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlGetParentId(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlGetParentWorkstation(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes sprintf_W(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes sprinti_W(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIprintFileVarSummary(void);
+extern NhlErrorTypes _NclIprintVarSummary(void);
+extern NhlErrorTypes _NclINhlGetParentId(void);
+extern NhlErrorTypes _NclINhlGetParentWorkstation(void);
+extern NhlErrorTypes sprintf_W(void);
+extern NhlErrorTypes sprinti_W(void);
 
 extern NhlErrorTypes _NclIFileVlenDef(void);
 extern NhlErrorTypes _NclIFileEnumDef(void);
@@ -139,958 +71,257 @@ extern NhlErrorTypes _NclIFileWriteCompound(void);
 extern NhlErrorTypes _NclIFileOpaqueDef(void);
 extern NhlErrorTypes _NclIFileGrpDef(void);
 
-extern NhlErrorTypes _NclIFileVarDef(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileVarDef(void);
 
-extern NhlErrorTypes _NclIFileVarChunkDef(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileVarChunkDef(void);
 
-extern NhlErrorTypes _NclIFileVarCompressLevelDef(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileVarCompressLevelDef(void);
 
-extern NhlErrorTypes _NclIFileVarChunkCacheDef(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileVarChunkCacheDef(void);
 
-extern NhlErrorTypes _NclIFileDimDef(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileDimDef(void);
 
-extern NhlErrorTypes _NclIFileChunkDimDef(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileChunkDimDef(void);
 
-extern NhlErrorTypes _NclIFileAttDef(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIFileVarAttDef(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIdim_stddev(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIdim_stddev_n(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstddev(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileAttDef(void);
+extern NhlErrorTypes _NclIFileVarAttDef(void);
+extern NhlErrorTypes _NclIdim_stddev(void);
+extern NhlErrorTypes _NclIdim_stddev_n(void);
+extern NhlErrorTypes _NclIstddev(void);
 
 
-extern NhlErrorTypes _NclIdim_variance(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIdim_variance(void);
 
-extern NhlErrorTypes _NclIdim_variance_n(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIdim_variance_n(void);
 
-extern NhlErrorTypes _NclIvariance(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIvariance(void);
 
-extern NhlErrorTypes _NclIgaus(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclmax(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclmin(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclmaxind(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclminind(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncldim_max(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncldim_max_n(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncldim_min(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncldim_min_n(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclmask(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclwhere(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclispan(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclfspan(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclind(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclnum(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncl1dtond(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclndto1d(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIgaus(void);
+extern NhlErrorTypes _Nclmax(void);
+extern NhlErrorTypes _Nclmin(void);
+extern NhlErrorTypes _Nclmaxind(void);
+extern NhlErrorTypes _Nclminind(void);
+extern NhlErrorTypes _Ncldim_max(void);
+extern NhlErrorTypes _Ncldim_max_n(void);
+extern NhlErrorTypes _Ncldim_min(void);
+extern NhlErrorTypes _Ncldim_min_n(void);
+extern NhlErrorTypes _Nclmask(void);
+extern NhlErrorTypes _Nclwhere(void);
+extern NhlErrorTypes _Nclispan(void);
+extern NhlErrorTypes _Nclfspan(void);
+extern NhlErrorTypes _Nclind(void);
+extern NhlErrorTypes _Nclnum(void);
+extern NhlErrorTypes _Ncl1dtond(void);
+extern NhlErrorTypes _Nclndto1d(void);
 
-extern NhlErrorTypes _Ncldim_product(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncldim_product_n(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclproduct(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncldim_sum(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Ncldim_sum_n(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclsum(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Ncldim_product(void);
+extern NhlErrorTypes _Ncldim_product_n(void);
+extern NhlErrorTypes _Nclproduct(void);
+extern NhlErrorTypes _Ncldim_sum(void);
+extern NhlErrorTypes _Ncldim_sum_n(void);
+extern NhlErrorTypes _Nclsum(void);
 
-extern NhlErrorTypes _Ncldim_cumsum(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Ncldim_cumsum(void);
 
-extern NhlErrorTypes _Ncldim_cumsum_n(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Ncldim_cumsum_n(void);
 
-extern NhlErrorTypes _Nclcumsum(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Nclcumsum(void);
 
-extern NhlErrorTypes _Ncldim_avg(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Ncldim_avg(void);
 
-extern NhlErrorTypes _Ncldim_avg_n(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Ncldim_avg_n(void);
 
-extern NhlErrorTypes _Nclavg(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Nclavg(void);
 
-extern NhlErrorTypes _NclIinttobyte(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIinttochar(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIinttoshort(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIinttobyte(void);
+extern NhlErrorTypes _NclIinttochar(void);
+extern NhlErrorTypes _NclIinttoshort(void);
 
-extern NhlErrorTypes _NclIshorttobyte(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIshorttochar(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIshorttobyte(void);
+extern NhlErrorTypes _NclIshorttochar(void);
 
-extern NhlErrorTypes _NclIlongtobyte(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIlongtochar(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIlongtoshort(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIlongtoint(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIlongtobyte(void);
+extern NhlErrorTypes _NclIlongtochar(void);
+extern NhlErrorTypes _NclIlongtoshort(void);
+extern NhlErrorTypes _NclIlongtoint(void);
 
-extern NhlErrorTypes _NclItochar(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclItobyte(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclItoubyte(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItochar(void);
+extern NhlErrorTypes _NclItobyte(void);
+extern NhlErrorTypes _NclItoubyte(void);
 
-extern NhlErrorTypes _NclItoshort(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclItoushort(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItoshort(void);
+extern NhlErrorTypes _NclItoushort(void);
 
-extern NhlErrorTypes _NclItoint(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclItouint(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItoint(void);
+extern NhlErrorTypes _NclItouint(void);
 
-extern NhlErrorTypes _NclItolong(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclItoulong(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItolong(void);
+extern NhlErrorTypes _NclItoulong(void);
 
-extern NhlErrorTypes _NclItoint64(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclItouint64(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItoint64(void);
+extern NhlErrorTypes _NclItouint64(void);
 
-extern NhlErrorTypes _NclItofloat(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclItodouble(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItofloat(void);
+extern NhlErrorTypes _NclItodouble(void);
 
-extern NhlErrorTypes _NclItostring(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItostring(void);
 
-extern NhlErrorTypes _NclItostring_with_format(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclItostring_with_format(void);
 
-extern NhlErrorTypes _NclItosigned
-#if NhlNeedProto
-(void)
-#else
-()
-#endif
-;
+extern NhlErrorTypes _NclItosigned(void);
 
-extern NhlErrorTypes _NclItounsigned
-#if NhlNeedProto
-(void)
-#else
-()
-#endif
-;
+extern NhlErrorTypes _NclItounsigned(void);
 
 
-extern NhlErrorTypes _NclIfloattobyte(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIfloattochar(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIfloattoshort(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIfloattoint(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIfloattolong(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIfloattobyte(void);
+extern NhlErrorTypes _NclIfloattochar(void);
+extern NhlErrorTypes _NclIfloattoshort(void);
+extern NhlErrorTypes _NclIfloattoint(void);
+extern NhlErrorTypes _NclIfloattolong(void);
 
-extern NhlErrorTypes _NclIdoubletobyte(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIdoubletochar(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIdoubletoshort(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIdoubletoint(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIdoubletolong(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIdoubletofloat(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIdoubletobyte(void);
+extern NhlErrorTypes _NclIdoubletochar(void);
+extern NhlErrorTypes _NclIdoubletoshort(void);
+extern NhlErrorTypes _NclIdoubletoint(void);
+extern NhlErrorTypes _NclIdoubletolong(void);
+extern NhlErrorTypes _NclIdoubletofloat(void);
 
-extern NhlErrorTypes _NclIchartodouble(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIchartofloat(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIchartolong(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIchartoshort(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIchartoint(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtointeger(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtoshort(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtolong(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtoint64(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtoushort(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtouint(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtoulong(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtouint64(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtodouble(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtofloat(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIstringtochar(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIchartostring(
-#if NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _Nclsystem(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIchartodouble(void);
+extern NhlErrorTypes _NclIchartofloat(void);
+extern NhlErrorTypes _NclIchartolong(void);
+extern NhlErrorTypes _NclIchartoshort(void);
+extern NhlErrorTypes _NclIchartoint(void);
+extern NhlErrorTypes _NclIstringtointeger(void);
+extern NhlErrorTypes _NclIstringtoshort(void);
+extern NhlErrorTypes _NclIstringtolong(void);
+extern NhlErrorTypes _NclIstringtoint64(void);
+extern NhlErrorTypes _NclIstringtoushort(void);
+extern NhlErrorTypes _NclIstringtouint(void);
+extern NhlErrorTypes _NclIstringtoulong(void);
+extern NhlErrorTypes _NclIstringtouint64(void);
+extern NhlErrorTypes _NclIstringtodouble(void);
+extern NhlErrorTypes _NclIstringtofloat(void);
+extern NhlErrorTypes _NclIstringtochar(void);
+extern NhlErrorTypes _NclIchartostring(void);
+extern NhlErrorTypes _Nclsystem(void);
 
-extern NhlErrorTypes _Nclsystemfunc(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Nclsystemfunc(void);
 
-extern NhlErrorTypes _Nclstrlen(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Nclstrlen(void);
 
-extern NhlErrorTypes _Nclidsfft(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _Nclidsfft(void);
 
-extern NhlErrorTypes _NclIIsVar(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsVar(void);
 
-extern NhlErrorTypes _NclIIsFileVar(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsFileVar(void);
 
-extern NhlErrorTypes _NclIIsCoord(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsAtt(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsCoord(void);
+extern NhlErrorTypes _NclIIsAtt(void);
 
-extern NhlErrorTypes _NclIIsFileVarAtt(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsFileVarAtt(void);
 
-extern NhlErrorTypes _NclIIsDim(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsDim(void);
 
-extern NhlErrorTypes _NclIIsDimNamed(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsDimNamed(void);
 
-extern NhlErrorTypes    _NclIVarIsUnlimited(
-# if    NhlNeedProto
-void
-# endif /* NhlNeedProto */
-);
+extern NhlErrorTypes    _NclIVarIsUnlimited(void);
 
-extern NhlErrorTypes _NclIIsFileVarDim(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsFileVarDim(void);
 
-extern NhlErrorTypes _NclIIsFileVarCoord(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsFileVarCoord(void);
 
-extern NhlErrorTypes _NclIIsDefined(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsProc(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsFunc(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIExit(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIStatusExit(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsDefined(void);
+extern NhlErrorTypes _NclIIsProc(void);
+extern NhlErrorTypes _NclIIsFunc(void);
+extern NhlErrorTypes _NclIExit(void);
+extern NhlErrorTypes _NclIStatusExit(void);
 
-extern NhlErrorTypes _NclIIsNumeric(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsENumeric(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsSNumeric(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsDouble(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsFloat(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsGraphic(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsFile(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsString(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsChar(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsByte(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsLong(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsUlong(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsInt64(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsUint64(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsUbyte(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsShort(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsUshort(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsInteger(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsUint(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsLogical(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsList(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIIsUnsigned(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIisbigendian(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIFileVarTypeOf(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclITypeOf(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIUnDef(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlIsApp(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlIsDataComm(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlIsDataItem(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlIsDataSpec(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlIsTransform(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlIsView(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclINhlIsWorkstation(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIIsNumeric(void);
+extern NhlErrorTypes _NclIIsENumeric(void);
+extern NhlErrorTypes _NclIIsSNumeric(void);
+extern NhlErrorTypes _NclIIsDouble(void);
+extern NhlErrorTypes _NclIIsFloat(void);
+extern NhlErrorTypes _NclIIsGraphic(void);
+extern NhlErrorTypes _NclIIsFile(void);
+extern NhlErrorTypes _NclIIsString(void);
+extern NhlErrorTypes _NclIIsChar(void);
+extern NhlErrorTypes _NclIIsByte(void);
+extern NhlErrorTypes _NclIIsLong(void);
+extern NhlErrorTypes _NclIIsUlong(void);
+extern NhlErrorTypes _NclIIsInt64(void);
+extern NhlErrorTypes _NclIIsUint64(void);
+extern NhlErrorTypes _NclIIsUbyte(void);
+extern NhlErrorTypes _NclIIsShort(void);
+extern NhlErrorTypes _NclIIsUshort(void);
+extern NhlErrorTypes _NclIIsInteger(void);
+extern NhlErrorTypes _NclIIsUint(void);
+extern NhlErrorTypes _NclIIsLogical(void);
+extern NhlErrorTypes _NclIIsList(void);
+extern NhlErrorTypes _NclIIsUnsigned(void);
+extern NhlErrorTypes _NclIisbigendian(void);
+extern NhlErrorTypes _NclIFileVarTypeOf(void);
+extern NhlErrorTypes _NclITypeOf(void);
+extern NhlErrorTypes _NclIUnDef(void);
+extern NhlErrorTypes _NclINhlIsApp(void);
+extern NhlErrorTypes _NclINhlIsDataComm(void);
+extern NhlErrorTypes _NclINhlIsDataItem(void);
+extern NhlErrorTypes _NclINhlIsDataSpec(void);
+extern NhlErrorTypes _NclINhlIsTransform(void);
+extern NhlErrorTypes _NclINhlIsView(void);
+extern NhlErrorTypes _NclINhlIsWorkstation(void);
 
-extern NhlErrorTypes _NclINhlGetWorkspaceObjectId(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclINhlGetWorkspaceObjectId(void);
 
-extern NhlErrorTypes _NclINhlGetClassResources(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclINhlGetClassResources(void);
 
-extern NhlErrorTypes _NclINhlAppGetDefaultParentId(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclINhlAppGetDefaultParentId(void);
 
 extern NhlErrorTypes _NclIGetFileVarChunkDimsizes(void);
 
-extern NhlErrorTypes _NclIFileVarDimsizes(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIGetFileVarDims(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIFileVarDimsizes(void);
+extern NhlErrorTypes _NclIGetFileVarDims(void);
 
-extern NhlErrorTypes _NclIGetFileVarAtts(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIGetFileVarAtts(void);
 
 extern NhlErrorTypes _NclIGetFileCompoundVarComponentNames(void);
 
-extern NhlErrorTypes _NclIGetVarDims(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIGetVarAtts(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIGetVarDims(void);
+extern NhlErrorTypes _NclIGetVarAtts(void);
 
-extern NhlErrorTypes _NclIAttSetValues(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIAttSetValues(void);
 
-extern NhlErrorTypes _NclIPop(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIPush(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclIPop(void);
+extern NhlErrorTypes _NclIPush(void);
 extern NhlErrorTypes _NclIAppend(void);
-extern NhlErrorTypes _NclINewList(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIListGetType(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIListSetType(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIListCount(
-#if     NhlNeedProto
-void
-#endif
-);
-extern NhlErrorTypes _NclIListIndex(
-#if     NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclINewList(void);
+extern NhlErrorTypes _NclIListGetType(void);
+extern NhlErrorTypes _NclIListSetType(void);
+extern NhlErrorTypes _NclIListCount(void);
+extern NhlErrorTypes _NclIListIndex(void);
 extern NhlErrorTypes _NclIListIndexFromName(void);
 extern NhlErrorTypes _NclIListVarNameFromIndex(void);
 
-extern NhlErrorTypes _NclINhlGetErrorObjectId(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclINhlGetErrorObjectId(void);
 
-extern NhlErrorTypes _NclINhlGetIsoLines(
-#if NhlNeedProto
-void
-#endif
-);
+extern NhlErrorTypes _NclINhlGetIsoLines(void);
 
-NhlErrorTypes _NclIGetScriptName(
-#if NhlNeedProto
-void
-#endif
-);
+NhlErrorTypes _NclIGetScriptName(void);
 
-NhlErrorTypes _NclIGetScriptPrefixName(
-#if NhlNeedProto
-void
-#endif
-);
+NhlErrorTypes _NclIGetScriptPrefixName(void);
 
-NhlErrorTypes _Ncldefault_fillvalue(
-#if NhlNeedProto
-void
-#endif
-);
+NhlErrorTypes _Ncldefault_fillvalue(void);
 
-NhlErrorTypes _Nclset_default_fillvalue(
-#if NhlNeedProto
-void
-#endif
-);
+NhlErrorTypes _Nclset_default_fillvalue(void);
 
-NhlErrorTypes _Nclget_cpu_time(
-#if NhlNeedProto
-void
-#endif
-);
+NhlErrorTypes _Nclget_cpu_time(void);
 
 NhlErrorTypes _Nclget_wall_time(void);
 
-NhlErrorTypes _NclCreateGraphic(
-#if NhlNeedProto
-void
-#endif
-);
+NhlErrorTypes _NclCreateGraphic(void);
 
 NhlErrorTypes _NclIgetfilepath(void);
 
-void _NclAddBuiltIns
-#if     NhlNeedProto
-(void)
-#else
-()
-#endif
+void _NclAddBuiltIns(void)
 {
 	void *args;
 	ng_size_t dimsizes[NCL_MAX_DIMENSIONS];
