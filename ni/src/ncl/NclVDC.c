@@ -15,7 +15,9 @@
 
 #include <vapor/VDC_c.h>
 
-#define VDC_DEBUG
+#define VDC_MAX_DIMS 4
+
+// #define VDC_DEBUG
 #ifdef VDC_DEBUG
 #define VDC_DEBUG_printf(...) fprintf (stderr, __VA_ARGS__)
 #define VDC_DEBUG_printff(...) { fprintf (stderr, "[%s:%i]%s", __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
@@ -44,6 +46,7 @@ struct _VDCRecord {
         int             numDimensions;
 
 		int levelOfDetail;
+		int compressionEnabled;
 };
 
 static NclBasicDataTypes _VDCXTypeToNCLDataType(VDC_XType xtype)
@@ -118,6 +121,7 @@ static void *VDCInitializeFileRec (NclFileFormat *format)
 	rec->numDimensions = 0;
 
 	rec->levelOfDetail = -1;
+	rec->compressionEnabled = 1;
 
 	*format = _NclVDC;
 	return (void *) rec;
@@ -341,7 +345,9 @@ static void VDCFreeFileRec (void* therec)
     if (rec->globalAttsValues) NclFree(rec->globalAttsValues);
     if (rec->dimensions) NclFree(rec->dimensions);     
 
-	VDC_EndDefine(rec->dataSource);
+
+	// VDC_EndDefine(rec->dataSource);
+    VDC_DEBUG_printff(": deleting VDC pointer.\n");
     VDC_delete(rec->dataSource);
 
     NclFree(rec);
@@ -569,7 +575,6 @@ static void *VDCReadVar (void* therec, NclQuark thevar, long* _start, long* _fin
 {
 	VDC_DEBUG_printff("('%s')\n", NrmQuarkToString(thevar));
 
-#define VDC_MAX_DIMS 5
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	float *out = (float*)storage;
@@ -616,7 +621,7 @@ static void *VDCReadVar (void* therec, NclQuark thevar, long* _start, long* _fin
 			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"size[":"", size[j], j==numDims-1?"]\n":", ");
 #endif
 			for (int j = 0; j < numDims; j++) count[j] = (finish[j]-start[j])/stride[j] + 1;
-			assert(numDims <= 4);
+			assert(numDims <= VDC_MAX_DIMS);
 
 			// Stride
 
@@ -799,6 +804,134 @@ static void *VDCReadVarAtt (void * therec, NclQuark thevar, NclQuark theatt, voi
 }
 
 
+static NhlErrorTypes VDCWriteVar (void * therec, NclQuark thevar, void *_data, long* _start, long *_finish, long *_stride)
+{
+    VDC_DEBUG_printff("('%s')\n", NrmQuarkToString(thevar));
+	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
+	float *data = (float*)_data;
+	long start [VDC_MAX_DIMS];
+	long finish[VDC_MAX_DIMS];
+	long stride[VDC_MAX_DIMS];
+	long count [VDC_MAX_DIMS];
+	long size  [VDC_MAX_DIMS];
+
+	for (int i = 0; i < rec->numVariablesAndCoords; i++) {
+		if (thevar == rec->variables[i].var_name_quark) {
+			int numDims = rec->variables[i].num_dimensions;
+			int refLevels = VDC_GetNumRefLevels(p, NrmQuarkToString(rec->variables[i].var_name_quark));
+			int refLevel = refLevels - 1;
+
+			// If not time varying, add fake flat time dimension for convenience
+			if (!rec->variablesIsTimeVarying[i]) {
+				VDC_DEBUG_printff(" Adding fake time variable\n");
+				for (int j = 0; j < numDims; j++) {
+					start [j+1] = _start [j];
+					finish[j+1] = _finish[j];
+					stride[j+1] = _stride[j];
+				}
+				start[0] = finish[0] = 0;
+				stride[0] = 1;
+				numDims++;
+				for (int j = 1; j < numDims; j++)
+					size[j] = rec->dimensions[rec->variables[i].file_dim_num[j-1]].dim_size;
+				size[0] = 1;
+			} else {
+				for (int j = 0; j < numDims; j++) {
+					start [j] = _start [j];
+					finish[j] = _finish[j];
+					stride[j] = _stride[j];
+				}
+				for (int j = 0; j < numDims; j++)
+					size[j] = rec->dimensions[rec->variables[i].file_dim_num[j]].dim_size;
+			}
+
+#ifdef VDC_DEBUG
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"start[":"", start[j], j==numDims-1?"], ":", ");
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"finish[":"", finish[j], j==numDims-1?"], ":", ");
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"stride[":"", stride[j], j==numDims-1?"]\n":", ");
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"size[":"", size[j], j==numDims-1?"]\n":", ");
+#endif
+			for (int j = 0; j < numDims; j++) count[j] = (finish[j]-start[j])/stride[j] + 1;
+			assert(numDims <= VDC_MAX_DIMS);
+
+			// Stride
+
+			for (int j = 0; j < numDims; j++) {
+				if (start[j] % stride[j] != 0 || finish[j] % stride[j] != 0) {
+					NhlPError(NhlFATAL, NhlEUNKNOWN, "VDCWriteVar: Stride needs to be aligned with read start and finish indexes."); // TODO VDC
+					return NhlFATAL;;
+				}
+			}
+
+			while (refLevel > 0) {
+				for (int j = 1; j < numDims; j++)
+					if (stride[j] % 2 == 1)
+					   goto _strideEnd;	
+
+				for (int j = 1; j < numDims; j++) {
+					stride[j] /= 2;
+					size[j]   /= 2;
+					finish[j]  = start[j] + ((finish[j] - start[j]) / 2);
+				}
+				refLevel--;
+			}
+_strideEnd: ;
+
+			// else {
+			// 	for (int j = 1; j < numDims; j++) {
+			// 		if (stride[j] != 1) {
+			// 			NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCReadVar: "); // TODO VDC
+			// 			break;
+			// 		}
+			// 	}
+			// }
+
+			size_t loadSize = 1;
+			for (int j = 1; j < numDims; j++) loadSize *= size[j];
+			float *in = malloc(sizeof(float)*loadSize);
+
+			for (int t = start[0]; t <= finish[0]; t += stride[0]) {
+				if (numDims == 2) { // Start at 2D because fake time dimension is added to 1D data
+					long ti = ((t - start[0]) / stride[0]) * count[1];
+					for (int x = start[1]; x <= finish[1]; x += stride[1]) {
+						in[x] = data[ti + ((x - start[1]) / stride[1])];
+					}
+				}
+				else if (numDims == 3) {
+					long ti = ((t - start[0]) / stride[0]) * count[1] * count[2];
+					for (int y = start[1]; y <= finish[1]; y += stride[1]) {
+						long yi = ti + ((y - start[1]) / stride[1]) * count[2];
+						for (int x = start[2]; x <= finish[2]; x += stride[2]) {
+							in[y*size[2] + x] = data[yi + ((x - start[2]) / stride[2])];
+						}
+					}
+				}
+				else if (numDims == 4) {
+					long ti = ((t - start[0]) / stride[0]) * count[1] * count[2] * count[3];
+					for (int z = start[1]; z <= finish[1]; z += stride[1]) {
+						long zi = ti + ((z - start[1]) / stride[1]) * count[2] * count[3];
+						for (int y = start[2]; y <= finish[2]; y += stride[2]) {
+							long yi = zi + ((y - start[2]) / stride[2]) * count[3];
+							for (int x = start[2]; x <= finish[2]; x += stride[2]) {
+								in[z*size[2]*size[3] + y*size[3] + x] = data[yi + ((x - start[3]) / stride[3])];
+							}
+						}
+					}
+				}
+				VDC_PutVarAtTimeStep(p, t, NrmQuarkToString(thevar), rec->levelOfDetail, in);
+			}
+
+			free(in);
+			return NhlNOERROR;
+		}
+	}
+
+	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCWriteVar: Variable \"%s\" does not exist.", NrmQuarkToString(thevar));
+	return NhlFATAL;
+}
+
+
 static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark theatt, void* data);
 static NhlErrorTypes VDCWriteAtt (void *therec, NclQuark theatt, void *data )
 {
@@ -911,11 +1044,25 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 		dims[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(dim_names[i])) + 1));
 		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
 	}
+
+	for (int i = 0; i < n_dims / 2; i++) {
+		char *tmp = dims[i];
+		dims[i] = dims[n_dims - i - 1];
+		dims[n_dims - i - 1] = tmp;
+		//_swap(&dims[i], &dims[n_dims - i - 1]);
+
+	}
 	
-	VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, NULL, 0, "", _NCLDataTypeToVDCXType(data_type), 0); // TODO VDC add compression fileoption
+	int ret = VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, NULL, 0, "", _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
 
 	for (int i = 0; i < n_dims; i++) free(dims[i]);
 	free(dims);
+
+	if (ret < 0) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVar: failed to add variable \"%s\" with error code %i.", NrmQuarkToString(thevar), ret);
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVar: error message: \"%s\"", VDC_GetErrMsg());
+		return NhlFATAL;
+	}
 
 	NclFVarRec *oldVariables = rec->variables;
 	int *oldVariablesIsTimeVarying = rec->variablesIsTimeVarying;
@@ -943,6 +1090,18 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 	NclFree(oldVariablesIsTimeVarying);
 
 	return NhlNOERROR;
+}
+
+
+static NhlErrorTypes VDCSetVarCompressLevel (void* therec, NclQuark thevar, int compress_level)
+{
+    VDC_DEBUG_printff("('%s', %i, )\n", NrmQuarkToString(thevar), compress_level);
+	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
+
+
+    VDC_DEBUG_printff(": Not Implemented\n", NrmQuarkToString(thevar), compress_level);
+	return NhlFATAL;
 }
 
 
@@ -1031,12 +1190,23 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 		int val = *(int*)values;
 		if (val >= -1) {
 			rec->levelOfDetail = val;
-			VDC_DEBUG_printff(" levelOfDetail = %i\n", rec->levelOfDetail);
+			VDC_DEBUG_printff(": %s = %i\n", NrmQuarkToString(option), rec->levelOfDetail);
 		} else {
-	 		NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value cannot be less than -1",NrmQuarkToString(option));
+	 		NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value cannot be less than -1", NrmQuarkToString(option));
 	 		return NhlWARNING;
 		}
 	}
+	else if (option ==  NrmStringToQuark("compressionenabled")) {
+		int val = *(int*)values;
+		if (val == 0 || val == 1) {
+			rec->compressionEnabled = val;
+			VDC_DEBUG_printff(": %s = %s\n", NrmQuarkToString(option), rec->compressionEnabled ? "true" : "false");
+		} else {
+	 		NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value must be 0 or 1.", NrmQuarkToString(option));
+	 		return NhlWARNING;
+		}
+	}
+
 	/* Handled by parent */
 	// else {
 	// 	NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) is invalid.",NrmQuarkToString(option));
@@ -1058,18 +1228,18 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 #define _NULLFUNC(x)
 #define NULLFUNC(x) NULL
 #endif
-_NULLFUNC(read_coord2)
-_NULLFUNC(read_var2)
 _NULLFUNC(VDCWriteCoord)
-_NULLFUNC(write_coord2)
-_NULLFUNC(VDCWriteVar)
-_NULLFUNC(write_var2)
 _NULLFUNC(VDCAddChunkDim)
-_NULLFUNC(VDCRenameDim)
 _NULLFUNC(VDCAddVarChunk)
 _NULLFUNC(VDCAddVarChunkCache)
 _NULLFUNC(VDCSetVarCompressLevel)
-_NULLFUNC(VDCAddCoordVar)
+
+_NULLFUNC(read_coord2)
+_NULLFUNC(read_var2)
+_NULLFUNC(write_coord2)
+_NULLFUNC(write_var2)
+_NULLFUNC(VDCRenameDim)
+_NULLFUNC(VDCAddCoordVar) // Not used according to NclNetCdf.c #2871
 _NULLFUNC(VDCDelAtt)
 _NULLFUNC(VDCDelVarAtt)
 
@@ -1096,7 +1266,7 @@ NclFormatFunctionRec VDCRec = {
 /* NclReadVarAttFunc       read_var_att; */		VDCReadVarAtt,
 /* NclWriteCoordFunc       write_coord; */		NULLFUNC(VDCWriteCoord),
 /* NclWriteCoordFunc       write_coord; */		NULLFUNC(write_coord2),
-/* NclWriteVarFunc         write_var; */		NULLFUNC(VDCWriteVar),
+/* NclWriteVarFunc         write_var; */		VDCWriteVar,
 /* NclWriteVarFunc         write_var; */		NULLFUNC(write_var2),
 /* NclWriteAttFunc         write_att; */		VDCWriteAtt,
 /* NclWriteVarAttFunc      write_var_att; */	VDCWriteVarAtt,

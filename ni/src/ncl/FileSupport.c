@@ -5011,6 +5011,8 @@ NhlErrorTypes InitializeFileOptions(NclFileOption *options)
 	options[Ncl_GRIB_CACHE_SIZE].valid_values = NULL;
 	/* End of options */
 
+#ifdef BuildVDC
+
 	/* VDC option Level_Of_Detail */
 	options[Ncl_VDC_LEVEL_OF_DETAIL].format = NrmStringToQuark("vdc");
 	options[Ncl_VDC_LEVEL_OF_DETAIL].name = NrmStringToQuark("levelofdetail");
@@ -5027,6 +5029,23 @@ NhlErrorTypes InitializeFileOptions(NclFileOption *options)
 				    NULL,1,&len_dims,PERMANENT,NULL,(NclTypeClass)nclTypeintClass);
 	options[Ncl_VDC_LEVEL_OF_DETAIL].valid_values = NULL;
 
+	/* VDC option Compression_Enable */
+	options[Ncl_VDC_COMPRESSION_ENABLED].format = NrmStringToQuark("vdc");
+	options[Ncl_VDC_COMPRESSION_ENABLED].name = NrmStringToQuark("compressionenabled");
+	len_dims = 1;
+	ival = (int*) NclMalloc(sizeof(int));
+	*ival = 1;
+	options[Ncl_VDC_COMPRESSION_ENABLED].value = 
+		_NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void *)ival,
+				    NULL,1,&len_dims,PERMANENT,NULL,(NclTypeClass)nclTypeintClass);
+	ival = (int*) NclMalloc(sizeof(int));
+	*ival = 1;
+	options[Ncl_VDC_COMPRESSION_ENABLED].def_value = 
+		_NclCreateMultiDVal(NULL,NULL,Ncl_MultiDValData,0,(void *)ival,
+				    NULL,1,&len_dims,PERMANENT,NULL,(NclTypeClass)nclTypeintClass);
+	options[Ncl_VDC_COMPRESSION_ENABLED].valid_values = NULL;
+
+#endif
 
 	/* Binary option KeepOpen */
 	options[Ncl_KEEP_OPEN].format = NrmStringToQuark("bin");
