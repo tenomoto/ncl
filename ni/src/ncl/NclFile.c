@@ -228,7 +228,7 @@ struct _NclSelectionRecord* /* sel_ptr */
  * Updates the coord info
  */
 
-static NhlErrorTypes UpdateCoordInfo 
+NhlErrorTypes UpdateCoordInfo 
 #if	NhlNeedProto
 (
 	NclFile  thefile,

@@ -35,24 +35,24 @@
 typedef struct _VDCRecord VDCRecord;
 
 struct _VDCRecord {
-        NclQuark		file_path_q;
-        int				wr_status;
-        VDC*			dataSource;
+	NclQuark		file_path_q;
+	int				wr_status;
+	VDC*			dataSource;
 
-        NclFVarRec      *variables;
-		int				numVariables;
-		int				numVariablesAndCoords;
+	NclFVarRec      *variables;
+	int				numVariables;
+	int				numVariablesAndCoords;
 
-        NclFAttRec		*globalAtts;
-        long			*globalAttsValues;
-        int				numAtts;
+	NclFAttRec		*globalAtts;
+	long			*globalAttsValues;
+	int				numAtts;
 
-        NclFDimRec      *dimensions;
-        int             numDimensions;
+	NclFDimRec      *dimensions;
+	int             numDimensions;
 
-		int levelOfDetail;
-		int compressionEnabled;
-		//long magic = 0xDB6C77A47778D171; // Temporary solution to check if VDC pointer
+	int levelOfDetail;
+	int compressionEnabled;
+	//long magic = 0xDB6C77A47778D171; // Temporary solution to check if VDC pointer
 };
 
 static NclBasicDataTypes _VDCXTypeToNCLDataType(VDC_XType xtype)
@@ -384,26 +384,27 @@ static NclQuark* VDCGetVarNames (void* therec, int *num_vars)
 
 static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 {
-    VDC_DEBUG_printff("()\n");	
-    
+	VDC_DEBUG_printff("()\n");	
+
 	VDCRecord *rec = (VDCRecord*)therec;
 
-    for (int i = 0; i < rec->numVariables; i++) {
-            if (var_name == rec->variables[i].var_name_quark) {
-                    NclFVarRec *ret = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec));
-                    ret->var_name_quark = rec->variables[i].var_name_quark;
-                    ret->var_full_name_quark = rec->variables[i].var_name_quark;
-                    ret->var_real_name_quark = rec->variables[i].var_name_quark;
-                    ret->data_type = rec->variables[i].data_type;
-                    ret->num_dimensions = rec->variables[i].num_dimensions;
-                    for (int j = 0; j < ret->num_dimensions; j++) {
-                            ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
-					}
-                    return ret;
-            }
-    }
+	for (int i = 0; i < rec->numVariablesAndCoords; i++) {
+		if (var_name == rec->variables[i].var_name_quark) {
+			NclFVarRec *ret = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec));
+			ret->var_name_quark = rec->variables[i].var_name_quark;
+			ret->var_full_name_quark = rec->variables[i].var_name_quark;
+			ret->var_real_name_quark = rec->variables[i].var_name_quark;
+			ret->data_type = rec->variables[i].data_type;
+			ret->num_dimensions = rec->variables[i].num_dimensions;
+			for (int j = 0; j < ret->num_dimensions; j++) {
+				ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
+			}
+			return ret;
+		}
+	}
 
-    return NULL;
+	VDC_DEBUG_printff(": Variable \"%s\" not found.", NrmQuarkToString(var_name));
+	return NULL;
 }
 
 
@@ -1409,7 +1410,7 @@ NhlErrorTypes _VDC_FileCoordDef(NclFile thefile, NclQuark varname, NclQuark *dim
 	thefile->file.var_att_ids[thefile->file.n_vars] = -1;
 	
 	thefile->file.n_vars++;
-	//UpdateCoordInfo(thefile,varname); // TODO VDC
+	UpdateCoordInfo(thefile,varname);
 
 	return NhlNOERROR;
 }

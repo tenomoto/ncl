@@ -489,6 +489,8 @@ NhlArgVal cbdata, NhlArgVal udata
 #endif
 );
 
+NhlErrorTypes UpdateCoordInfo(NclFile  thefile, NrmQuark varname);
+
 typedef struct _FileCallBackRec {
 	int	thefileid;
 	int	theattid;
