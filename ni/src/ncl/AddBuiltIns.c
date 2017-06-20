@@ -305,6 +305,10 @@ extern NhlErrorTypes _NclINhlGetErrorObjectId(void);
 
 extern NhlErrorTypes _NclINhlGetIsoLines(void);
 
+#ifdef BuildVDC
+extern NhlErrorTypes _VDC_IFileCoordDef(void);
+#endif
+
 NhlErrorTypes _NclIGetScriptName(void);
 
 NhlErrorTypes _NclIGetScriptPrefixName(void);
@@ -1654,6 +1658,21 @@ void _NclAddBuiltIns(void)
 	SetArgTemplate(args,2,"string",1,NclANY);nargs++;
 	SetArgTemplate(args,3,"string",1,NclANY);nargs++;
 	NclRegisterProc(_NclIFileVarDef,args,"filevardef",nargs);
+
+#ifdef BuildVDC
+extern NhlErrorTypes _VDC_FileCoordDef(void);
+	nargs = 0;
+	args = NewArgs(7);
+	dimsizes[0] = 1;
+	SetArgTemplate(args,0,"file",0,NclANY);nargs++;   // file pointer
+	SetArgTemplate(args,1,"string",1,NclANY);nargs++; // names
+	SetArgTemplate(args,2,"string",1,NclANY);nargs++; // dimensions
+	SetArgTemplate(args,3,"string",1,NclANY);nargs++; // time dim name
+	SetArgTemplate(args,4,"string",1,NclANY);nargs++; // units
+	SetArgTemplate(args,5,"string",1,NclANY);nargs++; // axis
+	SetArgTemplate(args,6,"string",1,NclANY);nargs++; // type
+	NclRegisterProc(_VDC_IFileCoordDef,args,"vdc_filecoorddef",nargs);
+#endif
 
 /*Begin: Wei added for Variable Chunking, April 8, 2010*/
 	nargs = 0;

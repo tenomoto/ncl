@@ -9,6 +9,9 @@
 #include "NclDataDefs.h"
 #include "NclFileInterfaces.h"
 #include "NclData.h"
+#include "NclFile.h"
+#include "DataSupport.h"
+#include "NclBuiltInSupport.h"
 #include <math.h>
 #include <unistd.h>
 #include <assert.h>
@@ -17,13 +20,16 @@
 
 #define VDC_MAX_DIMS 4
 
-// #define VDC_DEBUG
+#define VDC_DEBUG
 #ifdef VDC_DEBUG
 #define VDC_DEBUG_printf(...) fprintf (stderr, __VA_ARGS__)
 #define VDC_DEBUG_printff(...) { fprintf (stderr, "[%s:%i]%s", __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
+#include <signal.h>
+#define VDC_DEBUG_raise(...) raise(__VA_ARGS__)
 #else
 #define VDC_DEBUG_printf(...)
 #define VDC_DEBUG_printff(...)
+#define VDC_DEBUG_raise(...)
 #endif
 
 typedef struct _VDCRecord VDCRecord;
@@ -34,7 +40,6 @@ struct _VDCRecord {
         VDC*			dataSource;
 
         NclFVarRec      *variables;
-		int				*variablesIsTimeVarying;
 		int				numVariables;
 		int				numVariablesAndCoords;
 
@@ -47,6 +52,7 @@ struct _VDCRecord {
 
 		int levelOfDetail;
 		int compressionEnabled;
+		//long magic = 0xDB6C77A47778D171; // Temporary solution to check if VDC pointer
 };
 
 static NclBasicDataTypes _VDCXTypeToNCLDataType(VDC_XType xtype)
@@ -111,7 +117,6 @@ static void *VDCInitializeFileRec (NclFileFormat *format)
 	}
 
 	rec->variables = NULL;
-	rec->variablesIsTimeVarying = NULL;
 	rec->numVariables = 0;
 	rec->numVariablesAndCoords = 0;
 	rec->globalAtts = NULL;
@@ -263,7 +268,6 @@ static void _defineVariables (VDCRecord *rec)
 	rec->numVariables = dataCount;
 	rec->numVariablesAndCoords = dataCount + coordCount;
     rec->variables = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec) * (rec->numVariablesAndCoords));
-	rec->variablesIsTimeVarying = (int*)NclMalloc(sizeof(int) * (rec->numVariables));
 
 	for (int i = 0; i < rec->numVariablesAndCoords; i++) {
 		const char *name = i < dataCount ? dataNames[i] : coordNames[i - dataCount];
@@ -271,8 +275,6 @@ static void _defineVariables (VDCRecord *rec)
 
         rec->variables[i].var_name_quark = NrmStringToQuark(name);
         rec->variables[i].data_type = _VDCXTypeToNCLDataType(VDCBaseVar_GetXType(v));
-		if (i < rec->numVariables)
-			rec->variablesIsTimeVarying[i] = VDC_IsTimeVarying(p, name);
 
 		char **dims;
 		int dimCount;
@@ -340,7 +342,6 @@ static void VDCFreeFileRec (void* therec)
 
 	// TODO VDC free sub variables and any file pointers
     if (rec->variables)  NclFree(rec->variables);
-    if (rec->variablesIsTimeVarying) NclFree(rec->variablesIsTimeVarying);     
     if (rec->globalAtts) NclFree(rec->globalAtts);
     if (rec->globalAttsValues) NclFree(rec->globalAttsValues);
     if (rec->dimensions) NclFree(rec->dimensions);     
@@ -365,17 +366,17 @@ static NclQuark* VDCGetVarNames (void* therec, int *num_vars)
 	VDCRecord *rec = (VDCRecord*)therec;
 	int i;
 	
-	NclQuark* names = (NclQuark*) NclMalloc(sizeof(NclQuark) * rec->numVariables);
+	NclQuark* names = (NclQuark*) NclMalloc(sizeof(NclQuark) * rec->numVariablesAndCoords);
 	if (rec->numVariables > 0 && names == NULL) {
 	        NhlPError(NhlFATAL,ENOMEM,NULL);
 	        return NULL;
 	}
 	
-	for (i=0; i<rec->numVariables; i++) {
+	for (i=0; i<rec->numVariablesAndCoords; i++) {
 	        names[i] = rec->variables[i].var_name_quark;
 	}
 	
-	*num_vars = rec->numVariables;
+	*num_vars = rec->numVariablesAndCoords;
     VDC_DEBUG_printff(": returning %i variables\n", *num_vars);
 	return names;
 }
@@ -591,7 +592,7 @@ static void *VDCReadVar (void* therec, NclQuark thevar, long* _start, long* _fin
 			int refLevel = refLevels - 1;
 
 			// If not time varying, add fake flat time dimension for convenience
-			if (!rec->variablesIsTimeVarying[i]) {
+			if (!VDC_IsTimeVarying(p, NrmQuarkToString(rec->variables[i].var_name_quark))) {
 				VDC_DEBUG_printff(" Adding fake time variable\n");
 				for (int j = 0; j < numDims; j++) {
 					start [j+1] = _start [j];
@@ -823,7 +824,7 @@ static NhlErrorTypes VDCWriteVar (void * therec, NclQuark thevar, void *_data, l
 			int refLevel = refLevels - 1;
 
 			// If not time varying, add fake flat time dimension for convenience
-			if (!rec->variablesIsTimeVarying[i]) {
+			if (!VDC_IsTimeVarying(p, NrmQuarkToString(rec->variables[i].var_name_quark))) {
 				VDC_DEBUG_printff(" Adding fake time variable\n");
 				for (int j = 0; j < numDims; j++) {
 					start [j+1] = _start [j];
@@ -962,7 +963,7 @@ static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark the
 	else valuesSansQuark = values;
 
 	int n_items;
-	VDC_GetAtt_Count(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), n_items);
+	VDC_GetAtt_Count(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), &n_items);
 
 	VDC_DEBUG_printff(": Writing to VDC\n");
 	if (VDC_PutAtt(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), xt, valuesSansQuark, n_items) < 0) {
@@ -1065,18 +1066,13 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 	}
 
 	NclFVarRec *oldVariables = rec->variables;
-	int *oldVariablesIsTimeVarying = rec->variablesIsTimeVarying;
 	rec->variables = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec) * (rec->numVariablesAndCoords + 1));
-	rec->variablesIsTimeVarying = (int*)NclMalloc(sizeof(int) * (rec->numVariables + 1));
-	VDCBaseVar *v = VDCBaseVar_new();
 
 	memcpy(rec->variables, oldVariables, sizeof(NclFVarRec) * rec->numVariables);
 	memcpy(&rec->variables[rec->numVariables + 1], &oldVariables[rec->numVariables], sizeof(NclFVarRec) * (rec->numVariablesAndCoords - rec->numVariables));
-	memcpy(rec->variablesIsTimeVarying, oldVariablesIsTimeVarying, sizeof(int) * rec->numVariables);
 
 	rec->variables[rec->numVariables].var_name_quark = thevar;
 	rec->variables[rec->numVariables].data_type = data_type;
-	rec->variablesIsTimeVarying[rec->numVariables] = VDC_IsTimeVarying(p, NrmQuarkToString(thevar));
 
 	assert(n_dims <= NCL_MAX_DIMENSIONS);
 	rec->variables[rec->numVariables].num_dimensions = n_dims;
@@ -1087,7 +1083,6 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 	rec->numVariablesAndCoords++;
 
 	NclFree(oldVariables);
-	NclFree(oldVariablesIsTimeVarying);
 
 	return NhlNOERROR;
 }
@@ -1217,7 +1212,7 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 }
 
 
-#ifdef VDC_DEBUG
+#ifdef VDC_DEBUG_OFF
 #define _NULLFUNC(x) \
 	void NULL_##x (void) { \
 		printf("\n=======================================\nERROR: NULL VDC function %s called\n", #x); \
@@ -1292,3 +1287,198 @@ NclFormatFunctionRecPtr VDCAddFileFormat (void)
 {	
 	return(&VDCRec);
 }
+
+
+//
+// -----------------------------
+//       Custom Functions
+// -----------------------------
+//
+
+
+// TODO VDC NCL needs to be notified of change in function so it reloads info
+static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasicDataTypes data_type, int n_dims, NclQuark *dim_names, NclQuark timeDimName, NclQuark units, NclQuark axisStr)
+{
+    VDC_DEBUG_printff("('%s', %s, %i, [dim_names], [dim_sizes])\n", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims);
+	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
+
+	int axis = -1;
+	if      (axisStr == NrmStringToQuark("X")    || axisStr == NrmStringToQuark("x")) axis = 0;
+	else if (axisStr == NrmStringToQuark("Y")    || axisStr == NrmStringToQuark("y")) axis = 1;
+	else if (axisStr == NrmStringToQuark("Z")    || axisStr == NrmStringToQuark("z")) axis = 2;
+	else if (axisStr == NrmStringToQuark("T")    || axisStr == NrmStringToQuark("y")) axis = 3;
+	else if (axisStr == NrmStringToQuark("TIME") || axisStr == NrmStringToQuark("time") || axisStr == NrmStringToQuark("Time")) axis = 3;
+	else {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: invalid axis \"%s\".", NrmQuarkToString(axisStr));
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: valid axes are: X, Y, Z, T", VDC_GetErrMsg());
+		return NhlFATAL;
+	}
+
+	// VDC expects empty array for defining time coord but I don't know how to pass <empty> in NCL so will use "" as <empty>
+	if (n_dims == 1 && dim_names[0] == NrmStringToQuark(""))
+		n_dims = 0;
+
+	// VDC does not allow coordinate variables with the same names as dimensions to be compressed
+	// The VDC error message is cryptic so adding a check here with clearer message
+	if (rec->compressionEnabled) {
+		char **names;
+		int namesCount;
+		VDC_GetDimensionNames(p, &names, &namesCount);
+		for (int i = 0; i < namesCount; i++) {
+			if (NrmStringToQuark(names[i]) == thevar) {
+				VDC_FreeStringArray(&names, &namesCount);
+				NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: coordinate variables with the same names as dimensions cannot be compressed.");
+				return NhlFATAL;
+			}
+		}
+		VDC_FreeStringArray(&names, &namesCount);
+	}
+
+	char **dims = (char **)malloc(sizeof(char*) * n_dims);
+	for (int i = 0; i < n_dims; i++) {
+		dims[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(dim_names[i])) + 1));
+		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
+	}
+
+	for (int i = 0; i < n_dims / 2; i++) {
+		char *tmp = dims[i];
+		dims[i] = dims[n_dims - i - 1];
+		dims[n_dims - i - 1] = tmp;
+	}
+	
+	int ret = VDC_DefineCoordVar(p, NrmQuarkToString(thevar), dims, n_dims, NrmQuarkToString(timeDimName), NrmQuarkToString(units), axis, _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
+
+	for (int i = 0; i < n_dims; i++) free(dims[i]);
+	free(dims);
+
+	if (ret < 0) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: failed to add variable \"%s\" with error code %i.", NrmQuarkToString(thevar), ret);
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: error message: \"%s\"", VDC_GetErrMsg());
+		return NhlFATAL;
+	}
+
+	NclFVarRec *oldVariables = rec->variables;
+	rec->variables = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec) * (rec->numVariablesAndCoords + 1));
+	memcpy(rec->variables, oldVariables, sizeof(NclFVarRec) * rec->numVariablesAndCoords);
+
+	rec->variables[rec->numVariablesAndCoords].var_name_quark = thevar;
+	rec->variables[rec->numVariablesAndCoords].data_type = data_type;
+
+	assert(n_dims <= NCL_MAX_DIMENSIONS);
+	rec->variables[rec->numVariablesAndCoords].num_dimensions = n_dims;
+	for (int i = 0; i < n_dims; i++)
+		rec->variables[rec->numVariablesAndCoords].file_dim_num[i] = _dimensionNameToId(rec, NrmQuarkToString(dim_names[n_dims - i - 1]));
+
+	rec->numVariablesAndCoords++;
+
+	NclFree(oldVariables);
+
+	return NhlNOERROR;
+}
+
+NhlErrorTypes _VDC_FileCoordDef(NclFile thefile, NclQuark varname, NclQuark *dimnames, int dimnames_count, NclQuark timeDimName, NclQuark units, NclQuark axis, NclQuark type)
+{
+	NclFileClass fc = NULL;
+	if (thefile == NULL)
+		return NhlFATAL;
+
+	void *rec = thefile->file.private_rec;
+	//fc = (NclFileClass)thefile->obj.class_ptr;
+	if (NrmStringToQuark("vdc") != thefile->file.file_ext_q) {
+		NhlPError(NhlFATAL, NhlEUNKNOWN, "_VDC_FileCoordDef: file is not a VDC file.");
+		return NhlFATAL;
+	}
+	NclBasicDataTypes nclType = _nameToNclBasicDataType(type);
+	if (nclType == NCL_none) {
+		NhlPError(NhlFATAL, NhlEUNKNOWN, "_VDC_FileCoordDef: invalid data type.");
+		return NhlFATAL;
+	}
+
+	NhlErrorTypes ret = VDCAddCoordVarCustom(rec, varname, nclType, dimnames_count, dimnames, timeDimName, units, axis);
+	if (ret != NhlNOERROR)
+		return ret;
+
+	if(thefile->file.n_vars >= thefile->file.max_vars)
+	{
+		_NclReallocFilePart(&(thefile->file), -1, thefile->file.n_vars, -1, -1);
+	}
+
+	thefile->file.var_info[thefile->file.n_vars] = (*thefile->file.format_funcs->get_var_info)(thefile->file.private_rec,varname);
+	thefile->file.var_att_info[thefile->file.n_vars] = NULL;
+	thefile->file.var_att_ids[thefile->file.n_vars] = -1;
+	
+	thefile->file.n_vars++;
+	//UpdateCoordInfo(thefile,varname); // TODO VDC
+
+	return NhlNOERROR;
+}
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
+NhlErrorTypes _VDC_IFileCoordDef(void)
+{
+    VDC_DEBUG_printff("()\n");
+	NhlErrorTypes ret, ret0;
+
+	NclFile thefile;
+	obj *thefile_id;
+
+	NclQuark *dimnames;
+	int dimnames_count;
+	NclQuark *types;
+	NclQuark *varnames;
+	NclQuark *timeDimNames;
+	NclQuark *units;
+	NclQuark *axis;
+
+	ng_size_t dimsize;
+	NclScalar missing;
+	int has_missing;
+	ng_size_t tmp_dimsize;
+	NclScalar tmp_missing;
+	int tmp_has_missing;
+
+	thefile_id = (obj*)NclGetArgValue(0, 7, NULL, NULL, NULL, NULL, NULL, 0);
+	thefile = (NclFile)_NclGetObj((int)*thefile_id);
+	if(thefile == NULL) return(NhlFATAL);
+
+	varnames = (NclQuark*)NclGetArgValue(1, 7, NULL, &dimsize, &missing, &has_missing, NULL, 0);
+	if(has_missing) for(int i = 0; i < dimsize; i++) if(varnames[i] == missing.stringval) return(NhlFATAL);
+
+	dimnames = (void*)NclGetArgValue(2, 7, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0); 
+	dimnames_count = tmp_dimsize;
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(dimnames[i] == tmp_missing.stringval) return(NhlFATAL);
+
+	timeDimNames = (NclQuark*)NclGetArgValue(3, 7, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0); 
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(timeDimNames[i] == tmp_missing.stringval) return(NhlFATAL);
+
+	units = (NclQuark*)NclGetArgValue(4, 7, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0); 
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(units[i] == tmp_missing.stringval) return(NhlFATAL);
+
+	axis = (NclQuark*)NclGetArgValue(5, 7, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0); 
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(axis[i] == tmp_missing.stringval) return(NhlFATAL);
+
+	types = (NclQuark*)NclGetArgValue(6, 7, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0);
+    VDC_DEBUG_printff("\n");
+	if(tmp_dimsize != dimsize) {
+		return(NhlFATAL);
+	} else if(tmp_has_missing) {
+		for(int i = 0; i < dimsize; i++) {
+			if(types[i] == tmp_missing.stringval)  {
+				return(NhlFATAL);
+			}
+		}
+	}
+
+	for(int i = 0; i < dimsize; i ++) {
+		printf("(\"%s\", \"%s\", \"%s\", \"%s\", \"%s\")\n", NrmQuarkToString(varnames[i]), NrmQuarkToString(dimnames[i]), NrmQuarkToString(timeDimNames[i]), NrmQuarkToString(units[i]), NrmQuarkToString(axis[i]), NrmQuarkToString(types[i]));
+
+		ret = _VDC_FileCoordDef(thefile, varnames[i], dimnames, dimnames_count, timeDimNames[i], units[i], axis[i], types[i]);
+		if(ret < NhlINFO) {
+			ret0 = ret;
+		}
+	}
+	return(ret0);
+}
+#pragma GCC diagnostic pop
