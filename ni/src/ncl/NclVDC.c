@@ -347,7 +347,7 @@ static void VDCFreeFileRec (void* therec)
     if (rec->dimensions) NclFree(rec->dimensions);     
 
 
-	// VDC_EndDefine(rec->dataSource);
+	VDC_EndDefine(rec->dataSource);
     VDC_DEBUG_printff(": deleting VDC pointer.\n");
     VDC_delete(rec->dataSource);
 
