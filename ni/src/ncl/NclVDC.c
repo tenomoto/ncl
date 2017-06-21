@@ -20,7 +20,7 @@
 
 #define VDC_MAX_DIMS 4
 
-#define VDC_DEBUG
+//#define VDC_DEBUG
 #ifdef VDC_DEBUG
 #define VDC_DEBUG_printf(...) fprintf (stderr, __VA_ARGS__)
 #define VDC_DEBUG_printff(...) { fprintf (stderr, "[%s:%i]%s", __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
@@ -30,6 +30,18 @@
 #define VDC_DEBUG_printf(...)
 #define VDC_DEBUG_printff(...)
 #define VDC_DEBUG_raise(...)
+#endif
+
+#define VDC_DEBUG2
+#ifdef VDC_DEBUG2
+#define VDC_DEBUG2_printf(...) fprintf (stderr, __VA_ARGS__)
+#define VDC_DEBUG2_printff(...) { fprintf (stderr, "[%s:%i]%s", __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
+#include <signal.h>
+#define VDC_DEBUG2_raise(...) raise(__VA_ARGS__)
+#else
+#define VDC_DEBUG2_printf(...)
+#define VDC_DEBUG2_printff(...)
+#define VDC_DEBUG2_raise(...)
 #endif
 
 typedef struct _VDCRecord VDCRecord;
@@ -297,6 +309,7 @@ static void _defineVariables (VDCRecord *rec)
 static void *VDCOpenFile (void *therec, NclQuark path, int wr_status)
 {
     VDC_DEBUG_printff("(\"%s\", %i)\n", NrmQuarkToString(path), wr_status);
+	path = _VDCFixExt(path);
 
 	VDCRecord *rec = (VDCRecord*) therec;
     //ng_size_t numGeometry = 0;
@@ -1041,20 +1054,19 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 
+	// Swap dimension order to comply with VDC convensions
+	for (int i = 0; i < n_dims / 2; i++) {
+		NclQuark *tmp = dim_names[i];
+		dim_names[i] = dim_names[n_dims - i - 1];
+		dim_names[n_dims - i - 1] = tmp;
+	}
+	
 	char **dims = (char **)malloc(sizeof(char*) * n_dims);
 	for (int i = 0; i < n_dims; i++) {
 		dims[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(dim_names[i])) + 1));
 		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
 	}
 
-	for (int i = 0; i < n_dims / 2; i++) {
-		char *tmp = dims[i];
-		dims[i] = dims[n_dims - i - 1];
-		dims[n_dims - i - 1] = tmp;
-		//_swap(&dims[i], &dims[n_dims - i - 1]);
-
-	}
-	
 	int ret = VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, NULL, 0, "", _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
 
 	for (int i = 0; i < n_dims; i++) free(dims[i]);
@@ -1336,16 +1348,17 @@ static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasi
 		VDC_FreeStringArray(&names, &namesCount);
 	}
 
+	// Swap dimension order to comply with VDC convensions
+	for (int i = 0; i < n_dims / 2; i++) {
+		NclQuark *tmp = dim_names[i];
+		dim_names[i] = dim_names[n_dims - i - 1];
+		dim_names[n_dims - i - 1] = tmp;
+	}
+
 	char **dims = (char **)malloc(sizeof(char*) * n_dims);
 	for (int i = 0; i < n_dims; i++) {
 		dims[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(dim_names[i])) + 1));
 		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
-	}
-
-	for (int i = 0; i < n_dims / 2; i++) {
-		char *tmp = dims[i];
-		dims[i] = dims[n_dims - i - 1];
-		dims[n_dims - i - 1] = tmp;
 	}
 	
 	int ret = VDC_DefineCoordVar(p, NrmQuarkToString(thevar), dims, n_dims, NrmQuarkToString(timeDimName), NrmQuarkToString(units), axis, _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
@@ -1473,8 +1486,6 @@ NhlErrorTypes _VDC_IFileCoordDef(void)
 	}
 
 	for(int i = 0; i < dimsize; i ++) {
-		printf("(\"%s\", \"%s\", \"%s\", \"%s\", \"%s\")\n", NrmQuarkToString(varnames[i]), NrmQuarkToString(dimnames[i]), NrmQuarkToString(timeDimNames[i]), NrmQuarkToString(units[i]), NrmQuarkToString(axis[i]), NrmQuarkToString(types[i]));
-
 		ret = _VDC_FileCoordDef(thefile, varnames[i], dimnames, dimnames_count, timeDimNames[i], units[i], axis[i], types[i]);
 		if(ret < NhlINFO) {
 			ret0 = ret;
