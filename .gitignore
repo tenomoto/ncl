@@ -50,4 +50,7 @@ Thumbs.db
 *.bak
 [Mm]akefile
 include/
+/build
+/build.sh
+/Site.local.template
 

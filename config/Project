@@ -342,6 +342,12 @@
 #endif	/* OpenCLlib */
 #endif
 
+#ifdef BuildVDC
+#define VDClib -lvdc -lwasp -lcommon -Wl,-rpath,/glade/u/home/stasj/vapor/targets/Linux_x86_64/bin
+#else
+#define VDClib
+#endif
+
 #ifndef	XdrLibrary
 #define	XdrLibrary	/**/
 #endif	/* XdrLibrary */
@@ -375,6 +381,7 @@ NCLEXDIR		= nclex
 PYNGLEXDIR		= pynglex
 PYNGLDIR		= PyNGL
 NGODIR			= ngo
+VDCLIB      = VDClib
 NFPDIR			= nfp
 NFPFORTDIR		= nfpfort
 DATADIR			= data
