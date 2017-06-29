@@ -20,10 +20,28 @@
 
 #define VDC_MAX_DIMS 4
 
-//#define VDC_DEBUG
+#define AC_BLACK     "\x1b[30m"
+#define AC_RED       "\x1b[31m"
+#define AC_GREEN     "\x1b[32m"
+#define AC_YELLOW    "\x1b[33m"
+#define AC_BLUE      "\x1b[34m"
+#define AC_MAGENTA   "\x1b[35m"
+#define AC_CYAN      "\x1b[36m"
+#define AC_WHITE     "\x1b[37m"
+#define AC_BLACK_B   "\x1b[90m"
+#define AC_RED_B     "\x1b[91m"
+#define AC_GREEN_B   "\x1b[92m"
+#define AC_YELLOW_B  "\x1b[93m"
+#define AC_BLUE_B    "\x1b[94m"
+#define AC_MAGENTA_B "\x1b[95m"
+#define AC_CYAN_B    "\x1b[96m"
+#define AC_WHITE_B   "\x1b[97m"
+#define AC_RESET     "\x1b[0m"
+
+#define VDC_DEBUG
 #ifdef VDC_DEBUG
 #define VDC_DEBUG_printf(...) fprintf (stderr, __VA_ARGS__)
-#define VDC_DEBUG_printff(...) { fprintf (stderr, "[%s:%i]%s", __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
+#define VDC_DEBUG_printff(...) { fprintf (stderr, AC_BLACK_B"[%s:%i]%s"AC_RESET, __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
 #include <signal.h>
 #define VDC_DEBUG_raise(...) raise(__VA_ARGS__)
 #else
@@ -64,6 +82,8 @@ struct _VDCRecord {
 
 	int levelOfDetail;
 	int compressionEnabled;
+
+	int defineMode;
 	//long magic = 0xDB6C77A47778D171; // Temporary solution to check if VDC pointer
 };
 
@@ -97,13 +117,36 @@ static VDC_XType _NCLDataTypeToVDCXType(NclBasicDataTypes NCLtype)
 static const char *_NCLDataTypeToString(NclBasicDataTypes NCLtype)
 {
 	switch (NCLtype) {
-		case NCL_string: return "string";
-		case NCL_int:    return "int";
-		case NCL_int64:  return "int64";
-		case NCL_float:  return "float";
-		case NCL_double: return "double";
-		case NCL_none:   return "none";
-		default:         return "UNKNOWN DATA TYPE";
+		case NCL_none:      return "none";
+		case NCL_byte:      return "byte";
+		case NCL_ubyte:     return "ubyte";
+		case NCL_char:      return "char";
+		case NCL_short:     return "short";
+		case NCL_ushort:    return "ushort";
+		case NCL_int:       return "int";
+		case NCL_uint:      return "uint";
+		case NCL_float:     return "float";
+		case NCL_long:      return "long";
+		case NCL_ulong:     return "ulong";
+		case NCL_int64:     return "int64";
+		case NCL_uint64:    return "uint64";
+		case NCL_double:    return "double";
+		case NCL_string:    return "string";
+		case NCL_numeric:   return "numeric";
+		case NCL_enumeric:  return "enumeric";
+		case NCL_snumeric:  return "snumeric";
+		case NCL_logical:   return "logical";
+		case NCL_obj:       return "obj";
+		case NCL_list:      return "list";
+		case NCL_group:     return "group";
+		case NCL_compound:  return "compound";
+		case NCL_opaque:    return "opaque";
+		case NCL_enum:      return "enum";
+		case NCL_vlen:      return "vlen";
+		case NCL_reference: return "reference";
+		case NCL_virtual:   return "virtual";
+		case NCL_listarray: return "listarray";
+		default:            return "UNKNOWN DATA TYPE";
 	}
 }
 
@@ -115,6 +158,26 @@ static int _dimensionNameToId(VDCRecord *rec, const char *name)
 			return i;
 	}
 	return -1;
+}
+
+#define AssertDefineMode(rec) if (_assertDefineMode(rec)) return NhlFATAL
+static int _assertDefineMode(VDCRecord *rec)
+{
+	if (rec->defineMode == 0) {
+		NhlPError(NhlFATAL, NhlEUNKNOWN, "VDCAssertDefineMode: VDC must be in define mode for the operation.");
+		return 1;
+	}
+	return 0;
+}
+
+#define AssertWriteMode(rec) if (_assertWriteMode(rec)) return NhlFATAL
+static int _assertWriteMode(VDCRecord *rec)
+{
+	if (rec->defineMode == 1) {
+		VDC_EndDefine(rec->dataSource);
+		rec->defineMode = 0;
+	}
+	return 0;
 }
 
 static void *VDCInitializeFileRec (NclFileFormat *format)
@@ -139,6 +202,8 @@ static void *VDCInitializeFileRec (NclFileFormat *format)
 
 	rec->levelOfDetail = -1;
 	rec->compressionEnabled = 1;
+
+	rec->defineMode = 1;
 
 	*format = _NclVDC;
 	return (void *) rec;
@@ -359,8 +424,11 @@ static void VDCFreeFileRec (void* therec)
     if (rec->globalAttsValues) NclFree(rec->globalAttsValues);
     if (rec->dimensions) NclFree(rec->dimensions);     
 
+	double d[1] = {1.23};
+	VDC_PutAtt(rec->dataSource, "wave", "TESTING", VDC_XType_FLOAT, d, 1);
 
-	VDC_EndDefine(rec->dataSource);
+	if (rec->defineMode)
+		VDC_EndDefine(rec->dataSource);
     VDC_DEBUG_printff(": deleting VDC pointer.\n");
     VDC_delete(rec->dataSource);
 
@@ -499,9 +567,6 @@ static NclFAttRec* VDCGetAttInfo (void* therec, NclQuark att_name_q)
             NclFAttRec* ret = (NclFAttRec*) NclMalloc(sizeof(NclFAttRec));
             *ret = rec->globalAtts[i];
 
-			#ifdef VDC_DEBUG
-			fprintf(stderr, "rec->globalAtts[%i]\n", i);
-			#endif
             return ret;
         }
     }
@@ -557,7 +622,7 @@ static NclFAttRec *VDCGetVarAttInfo (void *therec, NclQuark thevar, NclQuark the
 	if (theatt == NrmStringToQuark("C_Ratios")) {
 		att = (NclFAttRec*)NclMalloc(sizeof(NclFAttRec));
 		att->att_name_quark = theatt;
-		att->data_type = NCL_int;;
+		att->data_type = NCL_int;
 		att->num_elements = VDC_GetCRatiosCount(p, NrmQuarkToString(thevar));
 		return att;
 	}
@@ -830,6 +895,7 @@ static NhlErrorTypes VDCWriteVar (void * therec, NclQuark thevar, void *_data, l
 	long stride[VDC_MAX_DIMS];
 	long count [VDC_MAX_DIMS];
 	long size  [VDC_MAX_DIMS];
+	AssertWriteMode(rec);
 
 	for (int i = 0; i < rec->numVariablesAndCoords; i++) {
 		if (thevar == rec->variables[i].var_name_quark) {
@@ -862,10 +928,10 @@ static NhlErrorTypes VDCWriteVar (void * therec, NclQuark thevar, void *_data, l
 			}
 
 #ifdef VDC_DEBUG
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"start[":"", start[j], j==numDims-1?"], ":", ");
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"finish[":"", finish[j], j==numDims-1?"], ":", ");
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"stride[":"", stride[j], j==numDims-1?"]\n":", ");
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"size[":"", size[j], j==numDims-1?"]\n":", ");
+			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"start[":"", start[j], j==numDims-1?"], ":", ");
+			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"finish[":"", finish[j], j==numDims-1?"], ":", ");
+			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"stride[":"", stride[j], j==numDims-1?"]\n":", ");
+			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"size[":"", size[j], j==numDims-1?"]\n":", ");
 #endif
 			for (int j = 0; j < numDims; j++) count[j] = (finish[j]-start[j])/stride[j] + 1;
 			assert(numDims <= VDC_MAX_DIMS);
@@ -875,7 +941,7 @@ static NhlErrorTypes VDCWriteVar (void * therec, NclQuark thevar, void *_data, l
 			for (int j = 0; j < numDims; j++) {
 				if (start[j] % stride[j] != 0 || finish[j] % stride[j] != 0) {
 					NhlPError(NhlFATAL, NhlEUNKNOWN, "VDCWriteVar: Stride needs to be aligned with read start and finish indexes."); // TODO VDC
-					return NhlFATAL;;
+					return NhlFATAL;
 				}
 			}
 
@@ -934,7 +1000,14 @@ _strideEnd: ;
 						}
 					}
 				}
-				VDC_PutVarAtTimeStep(p, t, NrmQuarkToString(thevar), rec->levelOfDetail, in);
+				if (VDC_PutVarAtTimeStep(p, t, NrmQuarkToString(thevar), rec->levelOfDetail, in) < 0) {
+					NhlPError(NhlFATAL, NhlEUNKNOWN, "VDCWriteVar: Error writing data to file: %s\n", VDC_GetErrMsg(p));
+					return NhlFATAL;
+				}
+				// if (VDC_PutVarAtTimeStep(p, t, "lon", rec->levelOfDetail, in) < 0) {
+				// 	NhlPError(NhlFATAL, NhlEUNKNOWN, "VDCWriteVar: Error writing data to file: %s\n", VDC_GetErrMsg(p));
+				// 	return NhlFATAL;
+				// }
 			}
 
 			free(in);
@@ -960,6 +1033,7 @@ static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark the
     VDC_DEBUG_printff("('%s', '%s')\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
+	AssertDefineMode(rec);
 
 	int xt = VDC_GetAttType(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	if (xt < 0) {
@@ -981,7 +1055,7 @@ static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark the
 
 	VDC_DEBUG_printff(": Writing to VDC\n");
 	if (VDC_PutAtt(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), xt, valuesSansQuark, n_items) < 0) {
-	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVarAtt: failed to write variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCWriteVarAtt: failed to write variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 		return NhlFATAL;
 	}
 
@@ -998,7 +1072,7 @@ static NhlErrorTypes VDCWriteVarAtt (void *therec, NclQuark thevar, NclQuark the
 		}
 		if (index == -1) {
 			VDC_DEBUG_printff(": Error: index was not set.\n");
-			NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVarAtt: failed to write variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+			NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCWriteVarAtt: failed to write variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 			return NhlFATAL;
 		}
 
@@ -1019,6 +1093,7 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
     VDC_DEBUG_printff("('%s', %li, %s)\n", NrmQuarkToString(thedim), size, is_unlimited?"True":"False");
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
+	AssertDefineMode(rec);
 
 	if (is_unlimited) {
 	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddDim: VDC does not support dimensions of unlimited length."); // TODO VDC
@@ -1053,6 +1128,7 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
     VDC_DEBUG_printff("('%s', %s, %i, [dim_names], [dim_sizes])\n", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims);
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
+	AssertDefineMode(rec);
 
 	// Swap dimension order to comply with VDC convensions
 	for (int i = 0; i < n_dims / 2; i++) {
@@ -1126,6 +1202,7 @@ static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theat
     VDC_DEBUG_printff("('%s', '%s', %s, %i, <data>)\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToString(data_type), n_items);
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
+	AssertDefineMode(rec);
 
 	void *valuesSansQuark;
 	if (data_type == NCL_string) {
@@ -1315,6 +1392,7 @@ static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasi
     VDC_DEBUG_printff("('%s', %s, %i, [dim_names], [dim_sizes])\n", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims);
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
+	AssertDefineMode(rec);
 
 	int axis = -1;
 	if      (axisStr == NrmStringToQuark("X")    || axisStr == NrmStringToQuark("x")) axis = 0;
