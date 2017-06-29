@@ -110,6 +110,7 @@ typedef struct _NclFileCompoundNode
     int                  index;
     size_t               offset;
     int                  rank;
+    ng_size_t            max_len;  /* for the maximum length of a string or vlen variable */
     ng_size_t            nvals;
     ng_size_t           *dimsizes;
     void                *value;

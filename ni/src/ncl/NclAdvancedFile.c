@@ -2428,6 +2428,7 @@ NclFileDimNode *_getDimNodeFromNclFileGrpNode(NclFileGrpNode *grpnode,
 {
     int n;
     NclFileDimNode *dim_node;
+    NclFileGrpNode *pgrpnode;
 
     if(NULL != grpnode->dim_rec)
     {
@@ -2439,15 +2440,15 @@ NclFileDimNode *_getDimNodeFromNclFileGrpNode(NclFileGrpNode *grpnode,
         }
     }
 
-    if(NULL != grpnode->grp_rec)
+    pgrpnode = grpnode;
+    while (pgrpnode->parent)
     {
-        for(n = 0; n < grpnode->grp_rec->n_grps; n++)
-        {
-            dim_node = _getDimNodeFromNclFileGrpNode(grpnode->grp_rec->grp_node[n], dim_name);
+	    pgrpnode = pgrpnode->parent;
+            dim_node = _getDimNodeFromNclFileGrpNode(pgrpnode, dim_name);
             if(NULL != dim_node)
-                return dim_node;
-        }
+		    return dim_node;
     }
+
 
     return NULL;
 }
@@ -7189,38 +7190,39 @@ static NhlErrorTypes MyAdvancedFileWriteVar(NclFile infile, NclQuark var,
 
             if((type == FILE_VAR_ACCESS) ? thefile->advancedfile.format_funcs->write_var != NULL:thefile->advancedfile.format_funcs->write_coord != NULL )
             {
-                if((!has_vectors)&&(!has_reverse)&&(!has_reorder)&&(value->multidval.kind != SCALAR))
-                {
-                    if(type == FILE_VAR_ACCESS)
-                    {
-                        ret = (*thefile->advancedfile.format_funcs->write_var)(
-                            thefile->advancedfile.grpnode,
-                            var,
-                            tmp_md->multidval.val,
-                            start,
-                            finish,    
-                            stride);
-                    }
-                    else
-                    {
-                        ret = (*thefile->advancedfile.format_funcs->write_coord)(
-                            thefile->advancedfile.grpnode,
-                            var,
-                            tmp_md->multidval.val,
-                            start,
-                            finish,    
-                            stride);
-                    }
+		    if((!has_vectors)&&(!has_reverse)&&(!has_reorder)&&
+		       (value->multidval.kind != SCALAR || (rhs_type == Ncl_Typelist && lhs_type == Ncl_Typecompound)))
+		    {
+			    if(type == FILE_VAR_ACCESS)
+			    {
+				    ret = (*thefile->advancedfile.format_funcs->write_var)(
+					    thefile->advancedfile.grpnode,
+					    var,
+					    tmp_md->multidval.val,
+					    start,
+					    finish,    
+					    stride);
+			    }
+			    else
+			    {
+				    ret = (*thefile->advancedfile.format_funcs->write_coord)(
+					    thefile->advancedfile.grpnode,
+					    var,
+					    tmp_md->multidval.val,
+					    start,
+					    finish,    
+					    stride);
+			    }
 
-                    if(free_tmp_md)
-                    {
-                        _NclDestroyObj((NclObj)tmp_md);
-                    }
+			    if(free_tmp_md)
+			    {
+				    _NclDestroyObj((NclObj)tmp_md);
+			    }
 
-                    goto done_MyAdvancedFileWriteVar;
-                }
-                else
-                {
+			    goto done_MyAdvancedFileWriteVar;
+		    }
+		    else
+		    {
                     if(value->multidval.kind != SCALAR)
                     {
                         val = tmp_md->multidval.val;

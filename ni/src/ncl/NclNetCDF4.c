@@ -2064,12 +2064,13 @@ NclFileUDTRecord *_NC4_get_udts(int gid, int uid, int n_udts)
 			     udtnode->fields[n].dim_sizes = NULL;
 		     }
 		     else {
+			     int j;
 			     dim_sizes = NclMalloc(sizeof(int) * ndims);
 			     nc_inq_compound_fielddim_sizes(gid,typeids[i],n,dim_sizes);
 			     udtnode->fields[n].n_dims = ndims;
 			     udtnode->fields[n].dim_sizes = (ng_size_t *)NclMalloc(ndims * sizeof(ng_size_t));
-			     for (i = 0; i < ndims; i++) {
-				     udtnode->fields[n].dim_sizes[i] = (ng_size_t) dim_sizes[i];
+			     for (j = 0; j < ndims; j++) {
+				     udtnode->fields[n].dim_sizes[j] = (ng_size_t) dim_sizes[j];
 			     }
 			     NclFree(dim_sizes);
 		     }
@@ -4202,6 +4203,8 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
 
                 NclFileCompoundRecord *comp_rec = varnode->comprec;
                 NclFileCompoundNode   *compnode = NULL;
+		int current_len = 0;
+		char *char_buf = NULL;
 
                 n_dims = varnode->dim_rec->n_dims;
 
@@ -4240,7 +4243,7 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
                     assert(data_value);
         
                     cur_mem_loc = 0;
-
+#if 0
                     for(i = 0; i < data_size; ++i)
                     {
                         comp_list = (NclList)_NclGetObj(obj_id[i]);
@@ -4255,6 +4258,45 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
                                            theval->multidval.val, mem_len[n]);
         
                                 cur_mem_loc += mem_len[n];
+                            }
+                            else
+                            {
+                                fprintf(stderr, "\nfile: %s, line: %d\n", __FILE__, __LINE__);
+                                fprintf(stderr, "\tUnknown cur_var->obj.obj_type: 0%x\n", cur_var->obj.obj_type);
+                            }
+
+                            step = step->next;
+                        }
+                    }
+#endif
+		    comp_list = (NclList)_NclGetObj(obj_id[0]);
+                    for(i = 0; i < data_size; ++i)
+                    {
+                        step = comp_list->list.first;
+                        for(n = 0; n < comp_rec->n_comps; ++n)
+                        {
+                            cur_var = (NclVar)_NclGetObj(step->obj_id);
+                            if(Ncl_Var == cur_var->obj.obj_type)
+                            {
+				    theval = (NclMultiDValData)_NclGetObj(cur_var->var.thevalue_id);
+				    if (theval->multidval.data_type == NCL_string) {
+					    if (current_len == 0) {
+						    char_buf = NclMalloc(sizeof(char) * mem_len[n]);
+						    current_len = mem_len[n];
+					    }
+					    else if (current_len < mem_len[n]) {
+						    char_buf = NclRealloc(char_buf, sizeof(char) * mem_len[n]);
+						    current_len = mem_len[n];
+					    }
+					    memset(char_buf,0,mem_len[n]);
+					    strcpy(char_buf,NrmQuarkToString(((NrmQuark*)theval->multidval.val)[i]));
+					    memcpy((char*)data_value + cur_mem_loc,char_buf, mem_len[n]);
+				    }
+				    else {
+					    memcpy((char*)data_value + cur_mem_loc,
+						   (char *)theval->multidval.val + i * mem_len[n] , mem_len[n]);
+				    }
+				    cur_mem_loc += mem_len[n];
                             }
                             else
                             {
@@ -4284,6 +4326,8 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
 
                     NclFree(data_value);
 		    NclFree(mem_len);
+		    if (char_buf != NULL)
+			    NclFree(char_buf);
                 }
             }
             else if(NCL_enum == varnode->type)
@@ -6629,6 +6673,7 @@ static NclFileVarNode *defNC4CompoundVar(void* therec, NclQuark thevar,
 {
     NclFileGrpNode *grpnode = (NclFileGrpNode *)therec;
     NclFileVarNode *varnode = NULL;
+    NclFileDimNode *dimnode = NULL;
     int fid,i,j;
     int nc_ret;
     int dim_ids[MAX_NC_DIMS];
@@ -6669,21 +6714,16 @@ static NclFileVarNode *defNC4CompoundVar(void* therec, NclQuark thevar,
         dim_ids[0] = -999;
         for(i = 0; i < n_dims; i++)
         {
-            for(j = 0; j < grpnode->dim_rec->n_dims; j++)
-            {
-                if(grpnode->dim_rec->dim_node[j].name == dim_names[i])
-                {
-                    if(NrmStringToQuark("ncl_scalar") == dim_names[i])
-                    {
+		dimnode = _getDimNodeFromNclFileGrpNode(grpnode,dim_names[i]);
+		if(NrmStringToQuark("ncl_scalar") == dim_names[i])
+		{
                         NhlPError(NhlFATAL,NhlEUNKNOWN,
-                            "defNC4CompoundVar: the reserved file dimension name \"ncl_scalar\" was used in a value with more than one dimension, can not add variable");
+				  "defNC4CompoundVar: the reserved file dimension name \"ncl_scalar\" was used in a value with more than one dimension, can not add variable");
                         return (varnode);
-                    }
-                    dim_ids[i] = grpnode->dim_rec->dim_node[j].id;
-                    break;
-                }
-            }
-        } 
+		}
+		if (dimnode)
+			dim_ids[i] = dimnode->id;
+	}
 
         if (dim_ids[0] == -999)
         {
