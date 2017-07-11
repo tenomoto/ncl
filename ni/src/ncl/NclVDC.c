@@ -384,14 +384,8 @@ static void *VDCOpenFile (void *therec, NclQuark path, int wr_status)
 		return(NULL);
 	}
 
-    /* NOTE: for now we only support read-only access */
-    if (wr_status == 0) {
-        NhlPError(NhlWARNING, NhlEUNKNOWN, "writing to VDC files is not currently implemented.");
-        wr_status = 1;
-    }
-
     rec->dataSource = VDC_new();
-	int success = VDC_Initialize(rec->dataSource, NrmQuarkToString(path), VDC_AccessMode_R);// NOTE read only access
+	int success = VDC_Initialize(rec->dataSource, NrmQuarkToString(path), wr_status == 1 ? VDC_AccessMode_R : VDC_AccessMode_A);
 
     if (success < 0) {
 		VDC_delete(rec->dataSource);
@@ -1143,7 +1137,7 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
 	}
 
-	int ret = VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, NULL, 0, "", _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
+	int ret = VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, (const char **)dims, n_dims, "", _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
 
 	for (int i = 0; i < n_dims; i++) free(dims[i]);
 	free(dims);
@@ -1286,6 +1280,12 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 		if (val == 0 || val == 1) {
 			rec->compressionEnabled = val;
 			VDC_DEBUG_printff(": %s = %s\n", NrmQuarkToString(option), rec->compressionEnabled ? "true" : "false");
+			// TODO VDC
+			if (val == 1 && rec->dataSource) {
+				size_t bs[3] = {64,64,64};
+				size_t cratios[4] = {1,4,21,62};
+				VDC_SetCompressionBlock(rec->dataSource, bs, 3, "bior4.4", cratios, 4);
+			}
 		} else {
 	 		NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value must be 0 or 1.", NrmQuarkToString(option));
 	 		return NhlWARNING;
@@ -1439,13 +1439,14 @@ static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasi
 		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
 	}
 	
-	int ret = VDC_DefineCoordVar(p, NrmQuarkToString(thevar), dims, n_dims, NrmQuarkToString(timeDimName), NrmQuarkToString(units), axis, _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
+	// int ret1 = VDC_DefineCoordVarUniform(p, NrmQuarkToString(thevar), dims, n_dims, NrmQuarkToString(timeDimName), NrmQuarkToString(units), axis, _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
+	int ret2 = VDC_DefineCoordVar(p, NrmQuarkToString(thevar), dims, n_dims, NrmQuarkToString(timeDimName), NrmQuarkToString(units), axis, _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
 
 	for (int i = 0; i < n_dims; i++) free(dims[i]);
 	free(dims);
 
-	if (ret < 0) {
-	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: failed to add variable \"%s\" with error code %i.", NrmQuarkToString(thevar), ret);
+	if (ret2 < 0) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: failed to add variable \"%s\" with error code %i.", NrmQuarkToString(thevar), ret2);
 	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: error message: \"%s\"", VDC_GetErrMsg());
 		return NhlFATAL;
 	}
