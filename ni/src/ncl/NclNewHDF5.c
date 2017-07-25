@@ -686,7 +686,7 @@ char *_getH5typeName(hid_t type, int ind)
                 {
                     /* Name and offset */
                     name = H5Tget_member_name(type, i);
-                    free(name);
+                    H5free_memory(name);
             
                     /* Member's type */
                     subtype = H5Tget_member_type(type, i);
@@ -937,7 +937,7 @@ char *_getH5typeName(hid_t type, int ind)
 
                 /* Release resources */
                 for (i=0; i<nmembs; i++) free(name[i]);
-                free(name);
+                H5free_memory(name);
                 free(value);
                 H5Tclose(super);
 
@@ -1210,6 +1210,7 @@ NclFileEnumRecord *readH5EnumAtt(hid_t type)
     {
         membname = H5Tget_member_name(type, n);
         enumrec->enum_node[n].name = NrmStringToQuark(membname);
+	H5free_memory(membname);
     }
 
     switch(enumrec->type)
@@ -1256,7 +1257,7 @@ NclFileEnumRecord *readH5EnumAtt(hid_t type)
              break;
     }
     
-    NclFree(membname);
+    H5free_memory(membname);
     NclFree(membvalue);
 
     return ((void *) enumrec);
@@ -1748,7 +1749,7 @@ herr_t _checkH5attribute(hid_t obj_id, const char *attr_name, const H5A_info_t *
 
                 H5Tclose(subtype);
                 NclFree(typename);
-                NclFree(mname);
+                H5free_memory(mname);
             }
 
             attnode->n_elem = nelmts;
@@ -2954,7 +2955,7 @@ herr_t _readH5dataInfo(hid_t dset, char *name, NclFileVarNode *node)
             mname = H5Tget_member_name(type, i);
             compnode->name = NrmStringToQuark(mname);
             compnode->offset = (unsigned long) H5Tget_member_offset(type, i);
-            free(mname);
+            H5free_memory(mname);
 
             componentnames[i] = compnode->name;
 
@@ -3052,7 +3053,6 @@ herr_t _readH5dataInfo(hid_t dset, char *name, NclFileVarNode *node)
                  break;
         }
 
-        membname = NclCalloc(256, sizeof(char));
         membvalue = NclCalloc(1, size);
 
         size = sizeof(NclQuark);
@@ -3069,6 +3069,7 @@ herr_t _readH5dataInfo(hid_t dset, char *name, NclFileVarNode *node)
           /*
            *fprintf(stderr, "\tmember %d, name: <%s>\n", n, membname);
            */
+	    H5free_memory(membname);
         }
 
         _addNclAttNode(&(varnode->att_rec), NrmStringToQuark("enum_name"),
@@ -3138,7 +3139,6 @@ herr_t _readH5dataInfo(hid_t dset, char *name, NclFileVarNode *node)
         _addNclAttNode(&(varnode->att_rec), NrmStringToQuark("enum_value"),
                        enumrec->type, enumrec->size, values);
 
-        free(membname);
         free(membvalue);
 
         NclFree(values);
@@ -3582,7 +3582,7 @@ herr_t _searchH5obj(char *name, const H5O_info_t *oinfo,
 			    default:
 				    ;
 			    }
-			    free(mem_name);
+			    H5free_memory(mem_name);
 			    H5Tclose(mem_type);
 		    }
 		    break;
@@ -4182,28 +4182,42 @@ static void _buildH5dimlist(NclFileGrpNode **rootgrp)
 		    {
 			    if(NULL == grpdimrec)
 			    {
+				    int dim_num = 0;
 				    for(j = 0; j < vardimrec->n_dims; ++j)
 				    {
 					    vardimnode = &(vardimrec->dim_node[j]);
 					    if(0 > vardimnode->name) {
-						    int dim_num;
 						    NclFileDimNode   *dimnode = NULL;
-						    NrmQuark tname = _getAdimName(j);
-						    dimnode = _getDimNodeFromNclFileGrpNode(grpnode, tname);
-						    if (! dimnode || dimnode->size == vardimnode->size) {
-							    vardimnode->name = tname;
-						    }
-						    else {
-							    dim_num = j;
-							    while (dimnode && dimnode->size != vardimnode->size) {
+						    NrmQuark tname = _getAdimName(dim_num);
+						    int done = 0;
+						    while (! done) {
+							    int k;
+							    for (k = j - 1; k > -1; k--) {
+								    if (vardimrec->dim_node[k].name == tname)
+									    break;
+							    }
+							    if (k > -1) { 
 								    dim_num++;
 								    tname = _getAdimName(dim_num);
-								    dimnode = _getDimNodeFromNclFileGrpNode(grpnode, tname);
+								    continue;
 							    }
-							    vardimnode->name = tname;
+							    done = 1;
 						    }
+						    dimnode = _getDimNodeFromNclFileGrpNode(grpnode, tname);
+						    if (! dimnode) {
+							    vardimnode->name = tname;
+							    _addH5dim(&grpdimrec, vardimnode->name, vardimnode->size, 0);
+							    continue;
+						    }
+						    while (dimnode && dimnode->size != vardimnode->size) {
+							    dim_num++;
+							    tname = _getAdimName(dim_num);
+							    dimnode = _getDimNodeFromNclFileGrpNode(grpnode, tname);
+						    }
+						    vardimnode->name = tname;
+						    _addH5dim(&grpdimrec, vardimnode->name, vardimnode->size, 0);
 					    }
-					    _addH5dim(&grpdimrec, vardimnode->name, vardimnode->size, 0);
+					    dim_num++;
 				    }
 				    grpnode->dim_rec = grpdimrec;
 			    }

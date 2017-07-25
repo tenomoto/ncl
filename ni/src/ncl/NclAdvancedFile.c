@@ -5217,6 +5217,7 @@ void AdvancedLoadVarAtts(NclAdvancedFile thefile, NclQuark var)
     NhlArgVal udata;
     ng_size_t ne;    
     int n;
+    char buf[1024];
 
     varnode = _getVarNodeFromNclFileGrpNode(thefile->advancedfile.grpnode, var);
 
@@ -5234,25 +5235,34 @@ void AdvancedLoadVarAtts(NclAdvancedFile thefile, NclQuark var)
     att_id = _NclAttCreate(NULL,NULL,Ncl_Att,0,(NclObj)thefile);
     for(n = 0; n < attrec->n_atts; n++)
     {
-        attnode = &(attrec->att_node[n]);
-        if(NCL_none == attnode->type)
-            val = NULL;
-        else
-            val = attnode->value;
+	    NclBasicDataTypes    type;
+	    attnode = &(attrec->att_node[n]);
+	    if(NCL_none == attnode->type)
+		    val = NULL;
+	    else
+		    val = attnode->value;
 
-        ne = attnode->n_elem;
-	if (attnode->type == NCL_reference || attnode->type == NCL_compound ||
-	    (attnode->type == NCL_vlen && attnode->base_type == NCL_reference))
-	    continue;
-        tmp_md = _NclCreateMultiDVal(
-                      NULL, NULL,
-                      Ncl_MultiDValData,
-                      0, val, NULL, 1,
-                      &ne, TEMPORARY, NULL,
-                      _NclTypeEnumToTypeClass(_NclBasicDataTypeToObjType(attnode->type)));
+	    ne = attnode->n_elem;
+	    if (attnode->type == NCL_compound ||
+		(attnode->type == NCL_vlen && attnode->base_type == NCL_reference))
+		    continue;
+	    type = attnode->type;
+	    if (attnode->type == NCL_reference) {
+		    NclFileReferenceNode *ref = (NclFileReferenceNode *) val;
+		    type = NCL_string;
+		    strcpy(buf, "reference to ");
+		    strcat(buf, NrmQuarkToString(ref->obj_name));
+		    *(NrmQuark*) val = NrmStringToQuark(buf); 
+	    }
+	    tmp_md = _NclCreateMultiDVal(
+		    NULL, NULL,
+		    Ncl_MultiDValData,
+		    0, val, NULL, 1,
+		    &ne, TEMPORARY, NULL,
+		    _NclTypeEnumToTypeClass(_NclBasicDataTypeToObjType(type)));
 
-        if(tmp_md != NULL)
-            _NclAddAtt(att_id, NrmQuarkToString(attnode->name),tmp_md,NULL);
+	    if(tmp_md != NULL)
+		    _NclAddAtt(att_id, NrmQuarkToString(attnode->name),tmp_md,NULL);
     }
 
     udata.ptrval = (void*)NclCalloc(1, sizeof(FileCallBackRec));
@@ -8886,10 +8896,13 @@ static NhlErrorTypes AdvancedFileWriteGrp(NclFile infile, NclQuark grpname)
      * existing group. First remove the new group from the name.
      */
        
-    lgname = NclMalloc(strlen(gname_all + 1));
+    lgname = NclCalloc(strlen(gname_all)+1,sizeof(char));
+    /*memset(lgname,0,strlen(gname_all)+1);*/
     strcpy(lgname,gname_all);
     cp = strrchr(lgname,'/');
-    *cp = '\0';
+    if (cp) {
+	    *cp = '\0';
+    }
     qpgrp_name = NrmStringToQuark(lgname);
     pgroup = _getGrpNodeFromNclFileGrpNode(grpnode,qpgrp_name);
     if (pgroup != NULL) {

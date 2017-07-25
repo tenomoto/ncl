@@ -4238,8 +4238,9 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
                             compound_size += mem_len[n];
                         }
                     }
+		    nc_inq_compound_size(fid,comp_rec->xtype,&compound_size);
         
-                    data_value = (void *)NclCalloc((ng_usize_t)(data_size*compound_size), sizeof(void));
+                    data_value = (void *)NclCalloc((ng_usize_t)data_size, compound_size);
                     assert(data_value);
         
                     cur_mem_loc = 0;
@@ -4254,10 +4255,9 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
                             if(Ncl_Var == cur_var->obj.obj_type)
                             {
                                 theval = (NclMultiDValData)_NclGetObj(cur_var->var.thevalue_id);
-                                memcpy(data_value + cur_mem_loc,
+                                memcpy(data_value + cur_mem_loc + comp_rec->compnode[n].offset,
                                            theval->multidval.val, mem_len[n]);
         
-                                cur_mem_loc += mem_len[n];
                             }
                             else
                             {
@@ -4273,7 +4273,7 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
                     for(i = 0; i < data_size; ++i)
                     {
                         step = comp_list->list.first;
-                        for(n = 0; n < comp_rec->n_comps; ++n)
+                        for(n = 0; n < comp_rec->n_comps; n++)
                         {
                             cur_var = (NclVar)_NclGetObj(step->obj_id);
                             if(Ncl_Var == cur_var->obj.obj_type)
@@ -4290,13 +4290,12 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
 					    }
 					    memset(char_buf,0,mem_len[n]);
 					    strcpy(char_buf,NrmQuarkToString(((NrmQuark*)theval->multidval.val)[i]));
-					    memcpy((char*)data_value + cur_mem_loc,char_buf, mem_len[n]);
+					    memcpy((char*)data_value + cur_mem_loc + comp_rec->compnode[n].offset,char_buf, mem_len[n]);
 				    }
 				    else {
-					    memcpy((char*)data_value + cur_mem_loc,
+					    memcpy((char*)data_value + cur_mem_loc + comp_rec->compnode[n].offset,
 						   (char *)theval->multidval.val + i * mem_len[n] , mem_len[n]);
 				    }
-				    cur_mem_loc += mem_len[n];
                             }
                             else
                             {
@@ -4305,7 +4304,9 @@ static NhlErrorTypes NC4WriteVar(void *therec, NclQuark thevar, void *data,
                             }
 
                             step = step->next;
+			    /*printf("mem_loc %d of %d, added %d\n",cur_mem_loc,data_size*compound_size,mem_len[n]);*/
                         }
+			cur_mem_loc += compound_size;
                     }
         
                     if(no_stride)
@@ -5393,29 +5394,22 @@ static NhlErrorTypes NC4AddVar(void* therec, NclQuark thevar,
         dim_ids[0] = -999;
         if(NULL != grpnode->dim_rec)
         {
-        for(i = 0; i < n_dims; i++)
-        {
-            for(j = 0; j < grpnode->dim_rec->n_dims; j++)
-            {
-                if(grpnode->dim_rec->dim_node[j].name == dim_names[i])
-                {
-                    if((n_dims > 1)&&(dim_names[i] == NrmStringToQuark("ncl_scalar")))
-                    {
-                        NhlPError(NhlFATAL,NhlEUNKNOWN,
-                            "NclNetCDF4: the reserved file dimension name \"ncl_scalar\" was used in a value with more than one dimension, can not add variable");
-                        return(NhlFATAL);
-                    }
-                    dim_ids[i] = grpnode->dim_rec->dim_node[j].id;
-                  /*
-                   *fprintf(stderr, "\tfile: %s, line: %d\n", __FILE__, __LINE__);
-                   *fprintf(stderr, "\tdimname[%d]: <%s>, dimid[%d] = %d\n",
-                   *                 i, NrmQuarkToString(dim_names[i]), i, dim_ids[i]);
-                   */
-                    break;
-                }
-            }
-        } 
-        } 
+		for(i = 0; i < n_dims; i++)
+		{
+			NclFileDimNode *dim_node;
+			dim_node = _getDimNodeFromNclFileGrpNode(grpnode,dim_names[i]);
+			if (! dim_node) {
+				continue;
+			}
+			if((n_dims > 1)&&(dim_names[i] == NrmStringToQuark("ncl_scalar")))
+			{
+				NhlPError(NhlFATAL,NhlEUNKNOWN,
+				  "NclNetCDF4: the reserved file dimension name \"ncl_scalar\" was used in a value with more than one dimension, can not add variable");
+				return(NhlFATAL);
+			}
+			dim_ids[i] = dim_node->id;
+		}
+	}	
 
         if (dim_ids[0] == -999)
         {
@@ -7077,7 +7071,7 @@ NhlErrorTypes NC4AddCompound(void *rec, NclQuark compound_name, NclQuark var_nam
 			    compnode->offset = udtnode->fields[n].offset;
 			    compnode->rank = udtnode->fields[n].n_dims;
 			    compnode->nvals = 1;
-			    compnode->dimsizes = NclMalloc(sizeof(int) * compnode->rank);
+			    compnode->dimsizes = NclMalloc(sizeof(ng_size_t) * compnode->rank);
 			    for (i = 0; i < compnode->rank; i++) {
 				    compnode->dimsizes[i] = udtnode->fields[n].dim_sizes[i];
 				    compnode->nvals *= compnode->dimsizes[i];
