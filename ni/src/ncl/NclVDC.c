@@ -164,8 +164,8 @@ static int _dimensionNameToId(VDCRecord *rec, const char *name)
 static int _assertDefineMode(VDCRecord *rec)
 {
 	if (rec->defineMode == 0) {
-		NhlPError(NhlFATAL, NhlEUNKNOWN, "VDCAssertDefineMode: VDC must be in define mode for the operation.");
-		return 1;
+		VDC_ReDefine(rec->dataSource);
+		rec->defineMode = 1;
 	}
 	return 0;
 }
@@ -1386,7 +1386,6 @@ NclFormatFunctionRecPtr VDCAddFileFormat (void)
 //
 
 
-// TODO VDC NCL needs to be notified of change in function so it reloads info
 static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasicDataTypes data_type, int n_dims, NclQuark *dim_names, NclQuark timeDimName, NclQuark units, NclQuark axisStr)
 {
     VDC_DEBUG_printff("('%s', %s, %i, [dim_names], [dim_sizes])\n", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims);
@@ -1502,7 +1501,7 @@ NhlErrorTypes _VDC_FileCoordDef(NclFile thefile, NclQuark varname, NclQuark *dim
 	thefile->file.var_att_ids[thefile->file.n_vars] = -1;
 	
 	thefile->file.n_vars++;
-	UpdateCoordInfo(thefile,varname);
+	UpdateCoordInfo(thefile, varname);
 
 	return NhlNOERROR;
 }
@@ -1566,6 +1565,171 @@ NhlErrorTypes _VDC_IFileCoordDef(void)
 
 	for(int i = 0; i < dimsize; i ++) {
 		ret = _VDC_FileCoordDef(thefile, varnames[i], dimnames, dimnames_count, timeDimNames[i], units[i], axis[i], types[i]);
+		if(ret < NhlINFO) {
+			ret0 = ret;
+		}
+	}
+	return(ret0);
+}
+
+static NhlErrorTypes VDCAddDataVarCustom(void* therec, NclQuark thevar, NclBasicDataTypes data_type, int n_dims, NclQuark *dim_names, int n_coords, NclQuark *coord_names, NclQuark units)
+{
+    VDC_DEBUG_printff("('%s', %s, %i, [dim_names], %i, [coords], '%s')\n", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims, n_coords, NrmQuarkToString(units));
+	VDCRecord *rec = (VDCRecord*)therec;
+	VDC *p = rec->dataSource;
+	AssertDefineMode(rec);
+
+	// Swap dimension order to comply with VDC convensions
+	for (int i = 0; i < n_dims / 2; i++) {
+		NclQuark *tmp  = dim_names[i];
+		dim_names[i] = dim_names[n_dims - i - 1];
+		dim_names[n_dims - i - 1] = tmp;
+
+		NclQuark *tmp2 = coord_names[i];
+		coord_names[i] = coord_names[n_coords - i - 1];
+		coord_names[n_coords - i - 1] = tmp2;
+	}
+
+	char **dims = (char **)malloc(sizeof(char*) * n_dims);
+	for (int i = 0; i < n_dims; i++) {
+		dims[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(dim_names[i])) + 1));
+		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
+	}
+	char **coords = (char **)malloc(sizeof(char*) * n_coords);
+	for (int i = 0; i < n_coords; i++) {
+		coords[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(coord_names[i])) + 1));
+		strcpy(coords[i], NrmQuarkToString(coord_names[i]));
+	}
+	
+	int ret2 = VDC_DefineDataVar(p, NrmQuarkToString(thevar), dims, n_dims, coords, n_coords, NrmQuarkToString(units), _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
+
+	for (int i = 0; i < n_dims; i++) free(dims[i]);
+	for (int i = 0; i < n_coords; i++) free(coords[i]);
+	free(dims);
+	free(coords);
+
+	if (ret2 < 0) {
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: failed to add variable \"%s\" with error code %i.", NrmQuarkToString(thevar), ret2);
+	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddCoordVar: error message: \"%s\"", VDC_GetErrMsg());
+		return NhlFATAL;
+	}
+
+	NclFVarRec *oldVariables = rec->variables;
+	rec->variables = (NclFVarRec*)NclMalloc(sizeof(NclFVarRec) * (rec->numVariablesAndCoords + 1));
+
+	memcpy(rec->variables, oldVariables, sizeof(NclFVarRec) * rec->numVariables);
+	memcpy(&rec->variables[rec->numVariables + 1], &oldVariables[rec->numVariables], sizeof(NclFVarRec) * (rec->numVariablesAndCoords - rec->numVariables));
+
+	rec->variables[rec->numVariables].var_name_quark = thevar;
+	rec->variables[rec->numVariables].data_type = data_type;
+
+	assert(n_dims <= NCL_MAX_DIMENSIONS);
+	rec->variables[rec->numVariables].num_dimensions = n_dims;
+	for (int i = 0; i < n_dims; i++)
+		rec->variables[rec->numVariables].file_dim_num[i] = _dimensionNameToId(rec, NrmQuarkToString(dim_names[n_dims - i - 1]));
+
+	rec->numVariables++;
+	rec->numVariablesAndCoords++;
+
+	NclFree(oldVariables);
+
+	return NhlNOERROR;
+}
+
+NhlErrorTypes _VDC_FileDataDef(NclFile thefile, NclQuark varname, NclQuark *dimnames, int dimnames_count, NclQuark *coordnames, int coordnames_count, NclQuark units, NclQuark type)
+{
+	NclFileClass fc = NULL;
+	if (thefile == NULL)
+		return NhlFATAL;
+
+	void *rec = thefile->file.private_rec;
+	//fc = (NclFileClass)thefile->obj.class_ptr;
+	if (NrmStringToQuark("vdc") != thefile->file.file_ext_q) {
+		NhlPError(NhlFATAL, NhlEUNKNOWN, "_VDC_FileCoordDef: file is not a VDC file.");
+		return NhlFATAL;
+	}
+	NclBasicDataTypes nclType = _nameToNclBasicDataType(type);
+	if (nclType == NCL_none) {
+		NhlPError(NhlFATAL, NhlEUNKNOWN, "_VDC_FileCoordDef: invalid data type.");
+		return NhlFATAL;
+	}
+
+	NhlErrorTypes ret = VDCAddDataVarCustom(rec, varname, nclType, dimnames_count, dimnames, coordnames_count, coordnames, units);
+	if (ret != NhlNOERROR)
+		return ret;
+
+	if(thefile->file.n_vars >= thefile->file.max_vars)
+	{
+		_NclReallocFilePart(&(thefile->file), -1, thefile->file.n_vars, -1, -1);
+	}
+
+	thefile->file.var_info[thefile->file.n_vars] = (*thefile->file.format_funcs->get_var_info)(thefile->file.private_rec,varname);
+	thefile->file.var_att_info[thefile->file.n_vars] = NULL;
+	thefile->file.var_att_ids[thefile->file.n_vars] = -1;
+	
+	thefile->file.n_vars++;
+	UpdateCoordInfo(thefile, varname);
+
+	return NhlNOERROR;
+}
+
+NhlErrorTypes _VDC_IFileDataDef(void)
+{
+    VDC_DEBUG_printff("()\n");
+	NhlErrorTypes ret, ret0;
+
+	NclFile thefile;
+	obj *thefile_id;
+
+	NclQuark *dimnames;
+	int dimnames_count;
+	NclQuark *types;
+	NclQuark *varnames;
+	NclQuark *coordVarNames;
+	int coordVarNames_count;
+	NclQuark *units;
+
+	ng_size_t dimsize;
+	NclScalar missing;
+	int has_missing;
+	ng_size_t tmp_dimsize;
+	NclScalar tmp_missing;
+	int tmp_has_missing;
+
+	thefile_id = (obj*)NclGetArgValue(0, 6, NULL, NULL, NULL, NULL, NULL, 0);
+	thefile = (NclFile)_NclGetObj((int)*thefile_id);
+	if(thefile == NULL) return(NhlFATAL);
+
+	varnames = (NclQuark*)NclGetArgValue(1, 6, NULL, &dimsize, &missing, &has_missing, NULL, 0);
+	if(has_missing) for(int i = 0; i < dimsize; i++) if(varnames[i] == missing.stringval) return(NhlFATAL);
+
+	dimnames = (void*)NclGetArgValue(2, 6, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0); 
+	dimnames_count = tmp_dimsize;
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(dimnames[i] == tmp_missing.stringval) return(NhlFATAL);
+
+	coordVarNames = (NclQuark*)NclGetArgValue(3, 6, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0); 
+	coordVarNames_count = tmp_dimsize;
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(coordVarNames[i] == tmp_missing.stringval) return(NhlFATAL);
+
+	units = (NclQuark*)NclGetArgValue(4, 6, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0); 
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(units[i] == tmp_missing.stringval) return(NhlFATAL);
+
+	types = (NclQuark*)NclGetArgValue(5, 6, NULL, &tmp_dimsize, &tmp_missing, &tmp_has_missing, NULL, 0);
+	if(tmp_has_missing) for(int i = 0; i < dimsize; i++) if(types[i] == tmp_missing.stringval) return(NhlFATAL);
+
+    VDC_DEBUG_printff("\n");
+	if(tmp_dimsize != dimsize) {
+		return(NhlFATAL);
+	} else if(tmp_has_missing) {
+		for(int i = 0; i < dimsize; i++) {
+			if(types[i] == tmp_missing.stringval)  {
+				return(NhlFATAL);
+			}
+		}
+	}
+
+	for(int i = 0; i < dimsize; i ++) {
+		ret = _VDC_FileDataDef(thefile, varnames[i], dimnames, dimnames_count, coordVarNames, coordVarNames_count, units[i], types[i]);
 		if(ret < NhlINFO) {
 			ret0 = ret;
 		}

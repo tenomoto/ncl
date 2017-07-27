@@ -307,6 +307,7 @@ extern NhlErrorTypes _NclINhlGetIsoLines(void);
 
 #ifdef BuildVDC
 extern NhlErrorTypes _VDC_IFileCoordDef(void);
+extern NhlErrorTypes _VDC_IFileDataDef(void);
 #endif
 
 NhlErrorTypes _NclIGetScriptName(void);
@@ -1672,6 +1673,18 @@ extern NhlErrorTypes _VDC_FileCoordDef(void);
 	SetArgTemplate(args,5,"string",1,NclANY);nargs++; // axis
 	SetArgTemplate(args,6,"string",1,NclANY);nargs++; // type
 	NclRegisterProc(_VDC_IFileCoordDef,args,"vdc_filecoorddef",nargs);
+
+extern NhlErrorTypes _VDC_FileDataDef(void);
+	nargs = 0;
+	args = NewArgs(7);
+	dimsizes[0] = 1;
+	SetArgTemplate(args,0,"file",0,NclANY);nargs++;   // file pointer
+	SetArgTemplate(args,1,"string",1,NclANY);nargs++; // names
+	SetArgTemplate(args,2,"string",1,NclANY);nargs++; // dimensions
+	SetArgTemplate(args,3,"string",1,NclANY);nargs++; // coordinate vars
+	SetArgTemplate(args,4,"string",1,NclANY);nargs++; // units
+	SetArgTemplate(args,5,"string",1,NclANY);nargs++; // type
+	NclRegisterProc(_VDC_IFileDataDef,args,"vdc_filedatadef",nargs);
 #endif
 
 /*Begin: Wei added for Variable Chunking, April 8, 2010*/
