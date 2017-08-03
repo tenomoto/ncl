@@ -62,6 +62,8 @@
 #define VDC_DEBUG2_raise(...)
 #endif
 
+static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasicDataTypes data_type, int n_dims, NclQuark *dim_names, NclQuark timeDimName, NclQuark units, NclQuark axisStr);
+
 typedef struct _VDCRecord VDCRecord;
 
 struct _VDCRecord {
@@ -164,8 +166,11 @@ static int _dimensionNameToId(VDCRecord *rec, const char *name)
 static int _assertDefineMode(VDCRecord *rec)
 {
 	if (rec->defineMode == 0) {
-		VDC_ReDefine(rec->dataSource);
-		rec->defineMode = 1;
+		// VDC_ReDefine(rec->dataSource);
+		// rec->defineMode = 1;
+		VDC_DEBUG_printf("Error: must be in define mode\n");
+		NhlPError(NhlFATAL, NhlEUNKNOWN, "must be in define mode");
+		return -1;
 	}
 	return 0;
 }
@@ -174,6 +179,7 @@ static int _assertDefineMode(VDCRecord *rec)
 static int _assertWriteMode(VDCRecord *rec)
 {
 	if (rec->defineMode == 1) {
+		printf("Calling end define\n");
 		VDC_EndDefine(rec->dataSource);
 		rec->defineMode = 0;
 	}
@@ -418,9 +424,6 @@ static void VDCFreeFileRec (void* therec)
     if (rec->globalAttsValues) NclFree(rec->globalAttsValues);
     if (rec->dimensions) NclFree(rec->dimensions);     
 
-	double d[1] = {1.23};
-	VDC_PutAtt(rec->dataSource, "wave", "TESTING", VDC_XType_FLOAT, d, 1);
-
 	if (rec->defineMode)
 		VDC_EndDefine(rec->dataSource);
     VDC_DEBUG_printff(": deleting VDC pointer.\n");
@@ -459,7 +462,7 @@ static NclQuark* VDCGetVarNames (void* therec, int *num_vars)
 
 static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 {
-	VDC_DEBUG_printff("()\n");	
+	VDC_DEBUG_printff("(%s)\n", NrmQuarkToString(var_name));	
 
 	VDCRecord *rec = (VDCRecord*)therec;
 
@@ -473,6 +476,12 @@ static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 			ret->num_dimensions = rec->variables[i].num_dimensions;
 			for (int j = 0; j < ret->num_dimensions; j++) {
 				ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
+			}
+
+			if (ret->num_dimensions == 0) {
+				ret->num_dimensions = 1;
+				ret->file_dim_num[0] = -5; // Reserved id for ncl_scalar
+				VDC_DEBUG_raise(SIGTRAP);
 			}
 			return ret;
 		}
@@ -1119,10 +1128,35 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
 
 static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes data_type, int n_dims, NclQuark *dim_names, long* dim_sizes)
 {
-    VDC_DEBUG_printff("('%s', %s, %i, [dim_names], [dim_sizes])\n", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims);
+#ifdef VDC_DEBUG
+    VDC_DEBUG_printff("('%s', %s, %i, [", NrmQuarkToString(thevar), _NCLDataTypeToString(data_type), n_dims);
+	for (int i = 0; i < n_dims; i++) VDC_DEBUG_printf("\"%s\"%s", NrmQuarkToString(dim_names[i]), i+1==n_dims?"], [":", ");
+	for (int i = 0; i < n_dims; i++) VDC_DEBUG_printf("\"%li\"%s", dim_sizes[i], i+1==n_dims?"])\n":", ");
+#endif
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	AssertDefineMode(rec);
+
+	// Check for implicit coordinate variables
+	if (n_dims == 1 && thevar == dim_names[0]) {
+		NclQuark timeDimName;
+		NclQuark units = NrmStringToQuark("");
+		NclQuark axis  = NrmStringToQuark("X");
+		if (thevar == NrmStringToQuark("time") ||
+				thevar == NrmStringToQuark("Time") ||
+				thevar == NrmStringToQuark("T") ||
+				thevar == NrmStringToQuark("t")) {
+			timeDimName = thevar;
+			n_dims = 0;
+			axis = NrmStringToQuark("T");
+		} else
+			timeDimName = NrmStringToQuark("");
+		return VDCAddCoordVarCustom(therec, thevar, data_type, n_dims, dim_names, timeDimName, units, axis);
+	}
+
+	// Check for ncl_scalar which implies a dimensionless variable
+	if (n_dims == 1 && dim_names[0] == NrmStringToQuark("ncl_scalar"))
+		n_dims = 0;
 
 	// Swap dimension order to comply with VDC convensions
 	for (int i = 0; i < n_dims / 2; i++) {
@@ -1137,7 +1171,7 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
 	}
 
-	int ret = VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, (const char **)dims, n_dims, "", _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
+	int ret = VDC_DefineDataVar(p, NrmQuarkToString(thevar), (const char **)dims, n_dims, NULL, 0, "", _NCLDataTypeToVDCXType(data_type), rec->compressionEnabled);
 
 	for (int i = 0; i < n_dims; i++) free(dims[i]);
 	free(dims);
@@ -1461,6 +1495,13 @@ static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasi
 	rec->variables[rec->numVariablesAndCoords].num_dimensions = n_dims;
 	for (int i = 0; i < n_dims; i++)
 		rec->variables[rec->numVariablesAndCoords].file_dim_num[i] = _dimensionNameToId(rec, NrmQuarkToString(dim_names[n_dims - i - 1]));
+
+	// Add time dim since it is store separately
+	if (timeDimName && timeDimName != NrmStringToQuark("")) {
+		assert(n_dims +1 <= NCL_MAX_DIMENSIONS);
+		rec->variables[rec->numVariablesAndCoords].file_dim_num[rec->variables[rec->numVariablesAndCoords].num_dimensions] = _dimensionNameToId(rec, NrmQuarkToString(timeDimName));
+		rec->variables[rec->numVariablesAndCoords].num_dimensions++;
+	}
 
 	rec->numVariablesAndCoords++;
 
