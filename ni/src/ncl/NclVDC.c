@@ -86,6 +86,7 @@ struct _VDCRecord {
 	int compressionEnabled;
 
 	int defineMode;
+	int hasScalarDim;
 	//long magic = 0xDB6C77A47778D171; // Temporary solution to check if VDC pointer
 };
 
@@ -210,6 +211,7 @@ static void *VDCInitializeFileRec (NclFileFormat *format)
 	rec->compressionEnabled = 1;
 
 	rec->defineMode = 1;
+	rec->hasScalarDim = 0;
 
 	*format = _NclVDC;
 	return (void *) rec;
@@ -481,7 +483,7 @@ static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 			if (ret->num_dimensions == 0) {
 				ret->num_dimensions = 1;
 				ret->file_dim_num[0] = -5; // Reserved id for ncl_scalar
-				VDC_DEBUG_raise(SIGTRAP);
+				//VDC_DEBUG_raise(SIGTRAP);
 			}
 			return ret;
 		}
@@ -530,6 +532,7 @@ static NclFDimRec *VDCGetDimInfo (void* therec, NclQuark dim_name_q)
         }
     }
 
+    VDC_DEBUG_printff(": ERROR not found\n", NrmQuarkToString(dim_name_q));
 	return NULL;
 }
 
@@ -1126,6 +1129,37 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
 }
 
 
+const char *_heuristicAxis(const char *name)
+{
+	char n[256];
+	assert(strlen(name) < 255);
+	strcpy(n, name);
+	{char *p = n; for (; *p; ++p) *p = tolower(*p);}
+
+	if (strstr(n, "lon"))    return "X";
+	if (strstr(n, "west"))   return "X";
+	if (strstr(n, "east"))   return "X";
+
+	if (strstr(n, "lat"))    return "Y";
+	if (strstr(n, "north"))  return "Y";
+	if (strstr(n, "south"))  return "Y";
+
+	if (!strcmp(n, "x"))       return "X";
+	if (!strcmp(n, "y"))       return "Y";
+
+	if (!strcmp(n, "t"))       return "T";
+	if (!strcmp(n, "time"))    return "T";
+	if (!strcmp(n, "days"))    return "T";
+	if (!strcmp(n, "hours"))   return "T";
+	if (!strcmp(n, "minutes")) return "T";
+	if (!strcmp(n, "seconds")) return "T";
+
+	if (strstr(n, "z_") == n) return "Z";
+
+	return "X";
+}
+
+
 static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes data_type, int n_dims, NclQuark *dim_names, long* dim_sizes)
 {
 #ifdef VDC_DEBUG
@@ -1136,27 +1170,35 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	AssertDefineMode(rec);
+	int add_scalar_dim = 0;
 
 	// Check for implicit coordinate variables
 	if (n_dims == 1 && thevar == dim_names[0]) {
-		NclQuark timeDimName;
+		NclQuark timeDimName = NrmStringToQuark("");
 		NclQuark units = NrmStringToQuark("");
-		NclQuark axis  = NrmStringToQuark("X");
-		if (thevar == NrmStringToQuark("time") ||
-				thevar == NrmStringToQuark("Time") ||
-				thevar == NrmStringToQuark("T") ||
-				thevar == NrmStringToQuark("t")) {
+		NclQuark axis  = NrmStringToQuark(_heuristicAxis(NrmQuarkToString(thevar)));
+		if (axis == NrmStringToQuark("T")) {
 			timeDimName = thevar;
 			n_dims = 0;
-			axis = NrmStringToQuark("T");
-		} else
-			timeDimName = NrmStringToQuark("");
+		}
 		return VDCAddCoordVarCustom(therec, thevar, data_type, n_dims, dim_names, timeDimName, units, axis);
 	}
 
 	// Check for ncl_scalar which implies a dimensionless variable
-	if (n_dims == 1 && dim_names[0] == NrmStringToQuark("ncl_scalar"))
+	if (n_dims == 1 && dim_names[0] == NrmStringToQuark("ncl_scalar")) {
 		n_dims = 0;
+		add_scalar_dim = 1;
+	}
+
+	// Manually add implicit coordinates here instead of in VDC to use heuristics for axes
+	for (int i = 0; i < n_dims; i++) {
+		if (VDC_CoordVarExists(p, NrmQuarkToString(dim_names[i])))
+			continue;
+
+		// VDCAddCoordVarCustom(therec, dim_names[i], NCL_float, 
+
+		// TODO VDC add variables to NCL cache
+	}
 
 	// Swap dimension order to comply with VDC convensions
 	for (int i = 0; i < n_dims / 2; i++) {
@@ -1200,6 +1242,21 @@ static NhlErrorTypes VDCAddVar (void* therec, NclQuark thevar, NclBasicDataTypes
 	rec->numVariablesAndCoords++;
 
 	NclFree(oldVariables);
+
+	if (add_scalar_dim) {
+		if (!rec->hasScalarDim) {
+			rec->hasScalarDim = 1;
+			NclFDimRec *oldDims = rec->dimensions;
+			rec->dimensions = (NclFDimRec*)NclMalloc(sizeof(NclFDimRec) * (rec->numDimensions + 1));
+			memcpy(rec->dimensions, oldDims, sizeof(NclFDimRec) * rec->numDimensions);
+			NclFree(oldDims);
+
+			rec->dimensions[rec->numDimensions].dim_name_quark = NrmStringToQuark("ncl_scalar");
+			rec->dimensions[rec->numDimensions].dim_size = 1;
+			rec->dimensions[rec->numDimensions].is_unlimited = 0;
+			rec->numDimensions++;
+		}
+	}
 
 	return NhlNOERROR;
 }
