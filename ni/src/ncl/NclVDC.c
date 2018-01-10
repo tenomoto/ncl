@@ -75,10 +75,10 @@ typedef struct _DimList { struct _DimList *next; NclFDimRec rec; } DimList;
 DimList *DimList_new() { DimList *p = (DimList*)NclMalloc(sizeof(DimList)); p->next = NULL; return p; }
 void DimList_delete(DimList *p) { NclFree(p); }
 void DimList_deleteList(DimList *p) { if (p->next) DimList_deleteList(p->next); DimList_delete(p); }
-DimList *DimList_index(DimList *p, int i) { if (i<0 || !p) { raise(SIGABRT); fprintf(stderr, "Error: Index %i out of bounds", i); exit(1); } if (i) return DimList_index(p->next, i-1); return p; }
 DimList *DimList_last(DimList *p) { if (p->next) return DimList_last(p->next); return p; }
 void DimList_push(DimList **l, DimList *p) { if (*l) DimList_push(&(*l)->next, p); else *l = p; }
 void DimList_pushFront(DimList **l, DimList *p) { if (*l) { DimList_push(&p, *l); *l = p; } else *l = p; }
+DimList *DimList_index(DimList *p, int i) { if (i<0 || !p) { raise(SIGABRT); fprintf(stderr, "Error: Index %i out of bounds", i); exit(1); } if (i) return DimList_index(p->next, i-1); return p; }
 
 typedef struct _VarList { struct _VarList *next; NclFVarRec rec; } VarList;
 VarList *VarList_new() { VarList *p = (VarList*)NclMalloc(sizeof(VarList)); p->next = NULL; return p; }
@@ -179,14 +179,16 @@ static const char *_NCLDataTypeToString(NclBasicDataTypes NCLtype)
 static int _dimensionNameToId(VDCRecord *rec, const char *name)
 {
 	NclQuark name_q = NrmStringToQuark(name);
+	NclQuark ncl_scalar_name = NrmStringToQuark("ncl_scalar");
 
 	DimList *l = rec->dims;
 	int i = 0;
 	while (l) {
 		if (l->rec.dim_name_quark == name_q)
 			return i;
+		if (l->rec.dim_name_quark != ncl_scalar_name)
+			i++;
 		l = l->next;
-		i++;
 	}
 #ifdef VDC_DEBUG
 	printf("%s: dim \"%s\" not found!\n", __func__, name);
@@ -513,15 +515,35 @@ static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 			ret->var_real_name_quark = rec->variables[i].var_name_quark;
 			ret->data_type = rec->variables[i].data_type;
 			ret->num_dimensions = rec->variables[i].num_dimensions;
-			for (int j = 0; j < ret->num_dimensions; j++) {
-				ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
-			}
 
 			if (ret->num_dimensions == 0) {
 				ret->num_dimensions = 1;
-				ret->file_dim_num[0] = _dimensionNameToId(rec, "ncl_scalar");
-				// ret->file_dim_num[0] = -5; // Reserved id for ncl_scalar
+				// ncl_scalar file_dim_num is required to be 0
+				ret->file_dim_num[0] = 0;
+				// On a side note, the NclNetCdf code implies that a variable can
+				// be both a scalar and have multiple dimensions. This is not accounted for here.
+
+				// Yes, this is required because of legacy code:
+			} else if (rec->hasScalarDim) {
+				for (int j = 0; j < ret->num_dimensions; j++) {
+					printf("---- Adding 1\n");
+					ret->file_dim_num[j] = rec->variables[i].file_dim_num[j] + 1;
+				}
+			} else {
+				for (int j = 0; j < ret->num_dimensions; j++) {
+					ret->file_dim_num[j] = rec->variables[i].file_dim_num[j];
+				}
 			}
+
+			for (int j = 0; j < ret->num_dimensions; j++) {
+				printf("[1] %s[%i] = dims[%i] = '%s'\n",
+						NrmQuarkToString(ret->var_name_quark), j, ret->file_dim_num[j],
+						NrmQuarkToString(
+							DimList_index(rec->dims, ret->file_dim_num[j])->rec.dim_name_quark 
+						)
+					);
+			}
+
 			return ret;
 		}
 	}
@@ -660,7 +682,7 @@ static NclQuark *VDCGetVarAttNames (void *therec , NclQuark thevar, int* num_att
 
 static NclFAttRec *VDCGetVarAttInfo (void *therec, NclQuark thevar, NclQuark theatt)
 {
-    VDC_DEBUG_printff("(%s, %s)\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
+    // VDC_DEBUG_printff("(%s, %s)\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	NclFAttRec *att = NULL; // (NclFAttRec*)NclMalloc((unsigned) sizeof(NclFAttRec));
@@ -941,6 +963,7 @@ static NhlErrorTypes VDCWriteVar (void * therec, NclQuark thevar, void *_data, l
 	long stride[VDC_MAX_DIMS];
 	long count [VDC_MAX_DIMS];
 	long size  [VDC_MAX_DIMS];
+	long _size  [VDC_MAX_DIMS];
 	AssertWriteMode(rec);
 
 	for (int i = 0; i < rec->numVariablesAndCoords; i++) {
@@ -948,36 +971,48 @@ static NhlErrorTypes VDCWriteVar (void * therec, NclQuark thevar, void *_data, l
 			int numDims = rec->variables[i].num_dimensions;
 			int refLevels = VDC_GetNumRefLevels(p, NrmQuarkToString(rec->variables[i].var_name_quark));
 			int refLevel = refLevels - 1;
+			int dimIndexOffset = rec->hasScalarDim ? 1 : 0;
 
-			// If not time varying, add fake flat time dimension for convenience
-			if (!VDC_IsTimeVarying(p, NrmQuarkToString(rec->variables[i].var_name_quark))) {
-				VDC_DEBUG_printff(" Adding fake time variable\n");
-				for (int j = 0; j < numDims; j++) {
-					start [j+1] = _start [j];
-					finish[j+1] = _finish[j];
-					stride[j+1] = _stride[j];
-				}
-				start[0] = finish[0] = 0;
-				stride[0] = 1;
+			for (int j = 0; j < numDims; j++)
+				_size[j] = DimList_index(rec->dims, rec->variables[i].file_dim_num[j] + dimIndexOffset)->rec.dim_size;
+
+			if (numDims == 0) {
+				// Add fake dimension of size 1 for scalar variable
 				numDims++;
-				for (int j = 1; j < numDims; j++)
-					size[j] = DimList_index(rec->dims, rec->variables[i].file_dim_num[j-1])->rec.dim_size;
-				size[0] = 1;
+				start [0] = 0;
+				finish[0] = 0;
+				stride[0] = 1;
+				size  [0] = 1;
 			} else {
-				for (int j = 0; j < numDims; j++) {
-					start [j] = _start [j];
-					finish[j] = _finish[j];
-					stride[j] = _stride[j];
+				// If not time varying, add fake flat time dimension for convenience
+				if (!VDC_IsTimeVarying(p, NrmQuarkToString(rec->variables[i].var_name_quark))) {
+					VDC_DEBUG_printff(" Adding fake time variable\n");
+					for (int j = 0; j < numDims; j++) {
+						start [j+1] = _start [j];
+						finish[j+1] = _finish[j];
+						stride[j+1] = _stride[j];
+						size  [j+1] = _size  [j];
+					}
+					start[0] = finish[0] = 0;
+					stride[0] = 1;
+					size[0] = 1;
+					numDims++;
+				} else {
+					for (int j = 0; j < numDims; j++) {
+						start [j] = _start [j];
+						finish[j] = _finish[j];
+						stride[j] = _stride[j];
+						size  [j] = _size  [j];
+					}
+
 				}
-				for (int j = 0; j < numDims; j++)
-					size[j] = DimList_index(rec->dims, rec->variables[i].file_dim_num[j])->rec.dim_size;
 			}
 
 #ifdef VDC_DEBUG
-			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"start[":"", start[j], j==numDims-1?"], ":", ");
-			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"finish[":"", finish[j], j==numDims-1?"], ":", ");
-			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"stride[":"", stride[j], j==numDims-1?"]\n":", ");
-			// for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"size[":"", size[j], j==numDims-1?"]\n":", ");
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"start[":"",  start[j],  j==numDims-1?"], ":", ");
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"finish[":"", finish[j], j==numDims-1?"], ":", ");
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"stride[":"", stride[j], j==numDims-1?"], ":", ");
+			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"size[":"",   size[j],   j==numDims-1?"]\n":", ");
 #endif
 			for (int j = 0; j < numDims; j++) count[j] = (finish[j]-start[j])/stride[j] + 1;
 			assert(numDims <= VDC_MAX_DIMS);
@@ -1140,6 +1175,7 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	AssertDefineMode(rec);
+	int is_scalar_dim = 0;
 
 	if (is_unlimited) {
 	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddDim: VDC does not support dimensions of unlimited length."); // TODO VDC
@@ -1156,8 +1192,7 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
 			return NhlFATAL;
 		}
 		rec->hasScalarDim = 1;
-
-		// ncl_scalar needs to be first
+		is_scalar_dim = 1;
 
 	} else {
 		if (VDC_DefineDimension(p, NrmQuarkToString(thedim), size) < 0) {
@@ -1171,8 +1206,25 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
 	d->rec.dim_size = size;
 	d->rec.is_unlimited = is_unlimited;
 
-	DimList_push(&rec->dims, d);
+	// ncl_scalar needs to be first
+	if (is_scalar_dim)
+		DimList_pushFront(&rec->dims, d);
+	else
+		DimList_push(&rec->dims, d);
 	rec->dimsCount++;
+
+	printf("--- dims ITerate list ---\n");
+	d = rec->dims;
+	int i = 0;
+	while (d) {
+		fprintf(stderr, "dims[%i] = '%s'\n", i, NrmQuarkToString(d->rec.dim_name_quark));
+		d = d->next; i++;
+	}
+	printf("--- dims iterate index ---\n");
+	for (i = 0; i < rec->dimsCount; i++) {
+		fprintf(stderr, "dims[%i] = '%s'[%li]\n", i, NrmQuarkToString(DimList_index(rec->dims, i)->rec.dim_name_quark), DimList_index(rec->dims, i)->rec.dim_size);
+	}
+
 
 	return NhlNOERROR;
 }
@@ -1318,14 +1370,14 @@ static NhlErrorTypes VDCSetVarCompressLevel (void* therec, NclQuark thevar, int 
 static NhlErrorTypes VDCAddVarAtt (void *therec,NclQuark thevar, NclQuark theatt, NclBasicDataTypes data_type, int n_items, void * values);
 static NhlErrorTypes VDCAddAtt (void *therec,NclQuark theatt, NclBasicDataTypes data_type, int n_items, void * values)
 {
-    VDC_DEBUG_printff("('%s', %s, %i, <data>)\n", NrmQuarkToString(theatt), _NCLDataTypeToString(data_type), n_items);
+    // VDC_DEBUG_printff("('%s', %s, %i, <data>)\n", NrmQuarkToString(theatt), _NCLDataTypeToString(data_type), n_items);
 	return VDCAddVarAtt(therec, NrmStringToQuark(""), theatt, data_type, n_items, values);
 }
 
 
 static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theatt, NclBasicDataTypes data_type, int n_items, void * values)
 {
-    VDC_DEBUG_printff("('%s', '%s', %s, %i, <data>)\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToString(data_type), n_items);
+    // VDC_DEBUG_printff("('%s', '%s', %s, %i, <data>)\n", NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToString(data_type), n_items);
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	AssertDefineMode(rec);
@@ -1334,11 +1386,11 @@ static NhlErrorTypes VDCAddVarAtt (void *therec, NclQuark thevar, NclQuark theat
 	if (data_type == NCL_string) {
 		valuesSansQuark = malloc(strlen(NrmQuarkToString(*(long*)values)) + 1);
 		strcpy((char *)valuesSansQuark, NrmQuarkToString(*(long*)values));
-		VDC_DEBUG_printff(": <data> is string \"%s\"\n", valuesSansQuark);
+		// VDC_DEBUG_printff(": <data> is string \"%s\"\n", valuesSansQuark);
 	}
 	else valuesSansQuark = values;
 
-	VDC_DEBUG_printff(": Adding to VDC\n");
+	// VDC_DEBUG_printff(": Adding to VDC\n");
 	if (VDC_PutAtt(p, NrmQuarkToString(thevar), NrmQuarkToString(theatt), _NCLDataTypeToVDCXType(data_type), valuesSansQuark, n_items) < 0) {
 	 	NhlPError(NhlFATAL,NhlEUNKNOWN, "VDCAddVarAtt: failed to add variable (\"%s\") attribute (\"%s\").", NrmQuarkToString(thevar), NrmQuarkToString(theatt));
 		return NhlFATAL;
