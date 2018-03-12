@@ -41,7 +41,7 @@
 #define VDC_DEBUG
 #ifdef VDC_DEBUG
 #define VDC_DEBUG_printf(...) fprintf (stderr, __VA_ARGS__)
-#define VDC_DEBUG_printff(...) { fprintf (stderr, AC_BLACK_B"[%s:%i]%s"AC_RESET, __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
+#define VDC_DEBUG_printff(...) { int isTty = isatty(fileno(stderr)); fprintf (stderr, "%s[%s:%i]%s%s", isTty?AC_BLACK_B:"", __FILE__, __LINE__, __func__, isTty?AC_RESET:""); fprintf (stderr, __VA_ARGS__); }
 #include <signal.h>
 #define VDC_DEBUG_raise(...) raise(__VA_ARGS__)
 const char *qts(long q) { return NrmQuarkToString(q); }
@@ -276,7 +276,7 @@ static void *VDCCreateFile (void *rec_, NclQuark path)
 
 	VDC *p = VDC_new();
     VDC_DEBUG_printff(": Initializing \"%s\"...\n", NrmQuarkToString(path));
-	int success = VDC_Initialize(p, NrmQuarkToString(path), VDC_AccessMode_W);
+	int success = VDC_InitializeDefaultBS(p, NrmQuarkToString(path), VDC_AccessMode_W);
     VDC_DEBUG_printf(" done\n");
     if (success < 0) {
 		VDC_delete(p);
@@ -432,7 +432,7 @@ static void *VDCOpenFile (void *therec, NclQuark path, int wr_status)
 	}
 
     rec->dataSource = VDC_new();
-	int success = VDC_Initialize(rec->dataSource, NrmQuarkToString(path), wr_status == 1 ? VDC_AccessMode_R : VDC_AccessMode_A);
+	int success = VDC_InitializeDefaultBS(rec->dataSource, NrmQuarkToString(path), wr_status == 1 ? VDC_AccessMode_R : VDC_AccessMode_A);
 
     if (success < 0) {
 		VDC_delete(rec->dataSource);
@@ -1213,6 +1213,7 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
 		DimList_push(&rec->dims, d);
 	rec->dimsCount++;
 
+	/*
 	printf("--- dims ITerate list ---\n");
 	d = rec->dims;
 	int i = 0;
@@ -1224,7 +1225,7 @@ static NhlErrorTypes VDCAddDim (void* therec, NclQuark thedim, ng_size_t size,in
 	for (i = 0; i < rec->dimsCount; i++) {
 		fprintf(stderr, "dims[%i] = '%s'[%li]\n", i, NrmQuarkToString(DimList_index(rec->dims, i)->rec.dim_name_quark), DimList_index(rec->dims, i)->rec.dim_size);
 	}
-
+	*/
 
 	return NhlNOERROR;
 }
@@ -1466,9 +1467,9 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 			VDC_DEBUG_printff(": %s = %s\n", NrmQuarkToString(option), rec->compressionEnabled ? "true" : "false");
 			// TODO VDC
 			if (val == 1 && rec->dataSource) {
-				size_t bs[3] = {64,64,64};
+				// size_t bs[3] = {64,64,64};
 				size_t cratios[4] = {1,4,21,62};
-				VDC_SetCompressionBlock(rec->dataSource, bs, 3, "bior4.4", cratios, 4);
+				VDC_SetCompressionBlock(rec->dataSource, "bior4.4", cratios, 4);
 			}
 		} else {
 	 		NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value must be 0 or 1.", NrmQuarkToString(option));
@@ -1616,7 +1617,7 @@ static NhlErrorTypes VDCAddCoordVarCustom(void* therec, NclQuark thevar, NclBasi
 		dim_names[n_dims - i - 1] = tmp;
 	}
 
-	char **dims = (char **)malloc(sizeof(char*) * n_dims);
+	char **dims = n_dims ? (char **)malloc(sizeof(char*) * n_dims) : NULL;
 	for (int i = 0; i < n_dims; i++) {
 		dims[i] = (char *)malloc(sizeof(char) * (strlen(NrmQuarkToString(dim_names[i])) + 1));
 		strcpy(dims[i], NrmQuarkToString(dim_names[i]));
