@@ -3936,7 +3936,7 @@ NclQuark _NclVerifyFile(NclQuark the_path, NclQuark pre_file_ext_q, short *use_a
             found = 0;
 
 			VDC *vdc = VDC_new();
-			int success = VDC_Initialize(vdc, filename, VDC_AccessMode_R);
+			int success = VDC_InitializeDefaultBS(vdc, filename, VDC_AccessMode_R);
 			if (vdc) VDC_delete(vdc);
 
         	if(success >= 0) {
