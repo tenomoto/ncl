@@ -38,7 +38,7 @@
 #define AC_WHITE_B   "\x1b[97m"
 #define AC_RESET     "\x1b[0m"
 
-#define VDC_DEBUG
+// #define VDC_DEBUG
 #ifdef VDC_DEBUG
 #define VDC_DEBUG_printf(...) fprintf (stderr, __VA_ARGS__)
 #define VDC_DEBUG_printff(...) { int isTty = isatty(fileno(stderr)); fprintf (stderr, "%s[%s:%i]%s%s", isTty?AC_BLACK_B:"", __FILE__, __LINE__, __func__, isTty?AC_RESET:""); fprintf (stderr, __VA_ARGS__); }
@@ -52,7 +52,7 @@ long stq(const char *s) { return NrmStringToQuark(s); }
 #define VDC_DEBUG_raise(...)
 #endif
 
-#define VDC_DEBUG2
+// #define VDC_DEBUG2
 #ifdef VDC_DEBUG2
 #define VDC_DEBUG2_printf(...) fprintf (stderr, __VA_ARGS__)
 #define VDC_DEBUG2_printff(...) { fprintf (stderr, "[%s:%i]%s", __FILE__, __LINE__, __func__); fprintf (stderr, __VA_ARGS__); }
@@ -78,7 +78,7 @@ void DimList_deleteList(DimList *p) { if (p->next) DimList_deleteList(p->next); 
 DimList *DimList_last(DimList *p) { if (p->next) return DimList_last(p->next); return p; }
 void DimList_push(DimList **l, DimList *p) { if (*l) DimList_push(&(*l)->next, p); else *l = p; }
 void DimList_pushFront(DimList **l, DimList *p) { if (*l) { DimList_push(&p, *l); *l = p; } else *l = p; }
-DimList *DimList_index(DimList *p, int i) { if (i<0 || !p) { raise(SIGABRT); fprintf(stderr, "Error: Index %i out of bounds", i); exit(1); } if (i) return DimList_index(p->next, i-1); return p; }
+DimList *DimList_index(DimList *p, int i) { if (i<0 || !p) { VDC_DEBUG_raise(SIGABRT); fprintf(stderr, "Error: Index %i out of bounds", i); exit(1); } if (i) return DimList_index(p->next, i-1); return p; }
 
 typedef struct _VarList { struct _VarList *next; NclFVarRec rec; } VarList;
 VarList *VarList_new() { VarList *p = (VarList*)NclMalloc(sizeof(VarList)); p->next = NULL; return p; }
@@ -214,7 +214,7 @@ static int _assertDefineMode(VDCRecord *rec)
 static int _assertWriteMode(VDCRecord *rec)
 {
 	if (rec->defineMode == 1) {
-		printf("Calling end define\n");
+		VDC_DEBUG_printf("Calling end define\n");
 		VDC_EndDefine(rec->dataSource);
 		rec->defineMode = 0;
 	}
@@ -526,7 +526,7 @@ static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 				// Yes, this is required because of legacy code:
 			} else if (rec->hasScalarDim) {
 				for (int j = 0; j < ret->num_dimensions; j++) {
-					printf("---- Adding 1\n");
+					VDC_DEBUG_printf("---- Adding 1\n");
 					ret->file_dim_num[j] = rec->variables[i].file_dim_num[j] + 1;
 				}
 			} else {
@@ -536,7 +536,7 @@ static NclFVarRec *VDCGetVarInfo (void *therec, NclQuark var_name)
 			}
 
 			for (int j = 0; j < ret->num_dimensions; j++) {
-				printf("[1] %s[%i] = dims[%i] = '%s'\n",
+				VDC_DEBUG_printf("[1] %s[%i] = dims[%i] = '%s'\n",
 						NrmQuarkToString(ret->var_name_quark), j, ret->file_dim_num[j],
 						NrmQuarkToString(
 							DimList_index(rec->dims, ret->file_dim_num[j])->rec.dim_name_quark 
@@ -719,133 +719,248 @@ static NclFVarRec *VDCGetCoordInfo (void* therec, NclQuark thevar)
 }
 
 
-static void *VDCReadVar (void* therec, NclQuark thevar, long* _start, long* _finish,long* _stride,void* storage)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning ignored "-Wunused-variable"
+// DivRoundUp
+#define DivRoundUp(a, b) (((a) + ((b) - 1)) / (b))
+#define DRU(...) DivRoundUp(__VA_ARGS__)
+static void *VDCReadVar(void* therec, NclQuark varNameQuark, long* _start, long* _end, long* _stride, void* storage)
 {
-	VDC_DEBUG_printff("('%s')\n", NrmQuarkToString(thevar));
-
 	VDCRecord *rec = (VDCRecord*)therec;
 	VDC *p = rec->dataSource;
 	float *out = (float*)storage;
-	long start [VDC_MAX_DIMS];
-	long finish[VDC_MAX_DIMS];
-	long stride[VDC_MAX_DIMS];
-	long count [VDC_MAX_DIMS];
-	long size  [VDC_MAX_DIMS];
+	long start      [VDC_MAX_DIMS];
+	long end        [VDC_MAX_DIMS];
+	long stride     [VDC_MAX_DIMS];
+	long strideDest [VDC_MAX_DIMS];
+	long count      [VDC_MAX_DIMS];
+	long refCnt     [VDC_MAX_DIMS];
+	long _refStart  [VDC_MAX_DIMS];
+	long refStart   [VDC_MAX_DIMS];
 
-	for (int i = 0; i < rec->numVariablesAndCoords; i++) {
-		if (thevar == rec->variables[i].var_name_quark) {
-			int numDims = rec->variables[i].num_dimensions;
-			int refLevels = VDC_GetNumRefLevels(p, NrmQuarkToString(rec->variables[i].var_name_quark));
-			int refLevel = refLevels - 1;
+	int numDims = -1;
+	for (int i = 0; i < rec->numVariablesAndCoords; i++)
+		if (varNameQuark == rec->variables[i].var_name_quark)
+			numDims = rec->variables[i].num_dimensions;
+	if (numDims == -1) {
+		printf("Variable not found\n");
+		return NULL;
+	}
 
-			// If not time varying, add fake flat time dimension for convenience
-			if (!VDC_IsTimeVarying(p, NrmQuarkToString(rec->variables[i].var_name_quark))) {
-				VDC_DEBUG_printff(" Adding fake time variable\n");
-				for (int j = 0; j < numDims; j++) {
-					start [j+1] = _start [j];
-					finish[j+1] = _finish[j];
-					stride[j+1] = _stride[j];
-				}
-				start[0] = finish[0] = 0;
-				stride[0] = 1;
-				numDims++;
-				for (int j = 1; j < numDims; j++)
-					size[j] = DimList_index(rec->dims, rec->variables[i].file_dim_num[j-1])->rec.dim_size;
-				size[0] = 1;
+	int isTimeVarying = VDC_IsTimeVarying(p, NrmQuarkToString(varNameQuark));
+	int refLevels     = VDC_GetNumRefLevels(p, NrmQuarkToString(varNameQuark));
+	int refLevel = refLevels - 1;
+
+	for (int i = 0; i < 4; i++) {
+		strideDest[i] = _stride[i];
+		_refStart [i] = _start [i];
+	}
+
+	// If all spacial dimensions are divisible by 2, decrease ref level and Ref start index
+	// Also if you are selecting a single slice (dim length 1), then only check the lower dimensions for
+	// stride as long as the selected slice aligns with the stride and exists at the refinement level
+	// TODO should I keep this feature? If iterating over strided slices, this would result in odd/even
+	// slices being read at different ref levels
+	while (refLevel > 0) {
+		size_t *_refCntIn;
+		int _nRefCntIn;
+		VDC_GetVarDimLensAtLevel(p, NrmQuarkToString(varNameQuark), refLevel - 1, &_refCntIn, &_nRefCntIn);
+		VDC_ReverseSize_tArray(_refCntIn, _nRefCntIn);
+	
+		long nextCount [VDC_MAX_DIMS];
+		nextCount[0] = 1;
+		if (isTimeVarying) for (int i = 0; i < _nRefCntIn; i++) nextCount[i+1] = _refCntIn[i];
+		else               for (int i = 0; i < _nRefCntIn; i++) nextCount[i]   = _refCntIn[i];
+		VDC_FreeSize_tArray(&_refCntIn);
+
+		for (int i = isTimeVarying ? 1 : 0; i < numDims; i++) {
+			if (
+					i == numDims - 3 &&                 // Currenly only allow this exception for z axis
+					_start[i] == _end[i] &&             // Ensure only one index i.e. a 2D slice
+					_refStart[i] % 2 == 0 &&            // Assert the slice exists in the next ref level
+					_refStart[i] / 2 < nextCount[i]		// Assert the slice is not lost due to block sizes
+				) {
+				continue;
+			}
+
+			if (_stride[i] % 2 != 0)
+				goto endRefWhile;
+		}
+		for (int i = isTimeVarying ? 1 : 0; i < numDims; i++) {
+			_stride[i] /= 2;
+			if (_stride[i] == 0)
+				_stride[i] = 1; // In case of 2D slice
+
+			_refStart[i] /= 2;
+		}
+		refLevel--;
+	}
+endRefWhile: ;
+
+	size_t *_refCntIn;
+	int _nRefCntIn;
+	VDC_GetVarDimLensAtLevel(p, NrmQuarkToString(varNameQuark), refLevel, &_refCntIn, &_nRefCntIn);
+	VDC_ReverseSize_tArray(_refCntIn, _nRefCntIn);
+
+	long _refCnt [VDC_MAX_DIMS];
+	_refCnt[0] = 1;
+	if (isTimeVarying) for (int i = 0; i < _nRefCntIn; i++) _refCnt[i+1] = _refCntIn[i];
+	else               for (int i = 0; i < _nRefCntIn; i++) _refCnt[i]   = _refCntIn[i];
+	VDC_FreeSize_tArray(&_refCntIn);
+
+#define SetArgsScalar(i) { \
+	start [i] = 0; \
+	end   [i] = 0; \
+	stride[i] = 1; \
+	count [i] = 1; \
+	refCnt[i] = 1; \
+	refStart[i] = 0; \
+}
+
+#define SetArgsAtTo(i, j) { \
+	start   [i] = _start   [j]; \
+	end     [i] = _end     [j]; \
+	stride  [i] = _stride  [j]; \
+	refCnt  [i] = _refCnt  [j]; \
+	refStart[i] = _refStart[j]; \
+	count   [i] = DRU(_end[j]-_start[j]+1, strideDest[j]); \
+}
+
+	// Upgrade to 4D
+	for (int i = 0; i < 4; i++)
+		SetArgsScalar(i);
+	if (isTimeVarying) {
+		SetArgsAtTo(0, 0);
+		for (int i = 1; i < numDims; i++)
+			SetArgsAtTo(i + 4-numDims, i);
+	} else {
+		for (int i = 0; i < numDims; i++)
+			SetArgsAtTo(i + 4-numDims, i);
+	}
+	numDims = 4;
+
+	// printf("------ Read %s ------\n", NrmQuarkToString(varNameQuark));
+	// printf("time varying = %s\n", isTimeVarying ? "true" : "false");
+	// printf("ref level = %i (%i)\n", refLevel, -(refLevels - refLevel - 1));
+	// for (int i = 0; i < numDims; i++) printf("%s%li%s", i==0?"start    = [":"", start   [i], i==numDims-1?"]\n":", ");
+	// for (int i = 0; i < numDims; i++) printf("%s%li%s", i==0?"end      = [":"", end     [i], i==numDims-1?"]\n":", ");
+	// for (int i = 0; i < numDims; i++) printf("%s%li%s", i==0?"count    = [":"", count   [i], i==numDims-1?"]\n":", ");
+	// for (int i = 0; i < numDims; i++) printf("%s%li%s", i==0?"stride   = [":"", stride  [i], i==numDims-1?"]\n":", ");
+	// for (int i = 0; i < numDims; i++) printf("%s%li%s", i==0?"refCnt   = [":"", refCnt  [i], i==numDims-1?"]\n":", ");
+	// for (int i = 0; i < numDims; i++) printf("%s%li%s", i==0?"refStart = [":"", refStart[i], i==numDims-1?"]\n":", ");
+
+#define Shortcuts(name, i) \
+	const long name##Start    = start [i]; \
+	const long name##End      = end   [i]; \
+	const long name##Stride   = stride[i]; \
+	const long name##Count    = count [i]; \
+	const long name##RefCnt   = refCnt[i]; \
+	const long name##RefStart = refCnt[i]; \
+	const long name##S  = start   [i]; \
+	const long name##E  = end     [i]; \
+	const long name##R  = stride  [i]; \
+	const long name##C  = count   [i]; \
+	const long name##RC = refCnt  [i]; \
+	const long name##RS = refStart[i]; \
+	;
+
+	Shortcuts(t, 0);
+	Shortcuts(z, 1);
+	Shortcuts(y, 2);
+	Shortcuts(x, 3);
+#undef Shortcuts
+
+	long inSize = 1;
+	long outSize = 1;
+	for (int i = 1; i < 4; i++) {
+		inSize *= refCnt[i];
+		outSize *= count[i];
+	}
+	float *in = malloc(sizeof(float) * inSize);
+
+// #define in(i) (((i) < inSize && (i) >= 0) ? in[i] : 60)
+	for (long i = 0; i < outSize; i++) out[i] = 1E10;
+
+
+	for (long t = 0; t < tC; t++) {
+		long x, y, z;
+
+		// printf("VDC_GetVarAtTimeStep(p, %i, %s, refLevel=%i, LOD=%i, in)\n", t * tR, NrmQuarkToString(varNameQuark), refLevel, rec->levelOfDetail);
+		VDC_GetVarAtTimeStep(p, t * tR, NrmQuarkToString(varNameQuark), refLevel, rec->levelOfDetail, in);
+
+		long ti = t * zC * yC * xC;
+		for (z = 0; z < zC && zRS + z*zR < zRC; z++) {
+			long zi = ti + z * yC * xC;
+			long zIni = (zRS + z*zR)*yRC*xRC;
+
+			if (xR == 1 && yR == 1 && xRS == 0 && xC == xRC) {
+				const int nSrc = yC;
+				const int nDst = yRC-yRS;
+				const long n = nDst < nSrc ? nDst : nSrc;
+				memcpy(&out[zi], &in[zIni + xRS], sizeof(float) * n * xC);
+				y = n;
 			} else {
-				for (int j = 0; j < numDims; j++) {
-					start [j] = _start [j];
-					finish[j] = _finish[j];
-					stride[j] = _stride[j];
-				}
-				for (int j = 0; j < numDims; j++)
-					size[j] = DimList_index(rec->dims, rec->variables[i].file_dim_num[j])->rec.dim_size;
-			}
+				for (y = 0; y < yC && yRS + y*yR < yRC; y++) {
+					long yi = zi + y * xC;
+					long yIni = zIni + (yRS + y*yR)*xRC;
 
-#ifdef VDC_DEBUG
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"start[":"", start[j], j==numDims-1?"], ":", ");
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"finish[":"", finish[j], j==numDims-1?"], ":", ");
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"stride[":"", stride[j], j==numDims-1?"]\n":", ");
-			for (int j = 0; j < numDims; j++) VDC_DEBUG_printf("%s%li%s", j==0?"size[":"", size[j], j==numDims-1?"]\n":", ");
-#endif
-			for (int j = 0; j < numDims; j++) count[j] = (finish[j]-start[j])/stride[j] + 1;
-			assert(numDims <= VDC_MAX_DIMS);
-
-			// Stride
-
-			for (int j = 0; j < numDims; j++) {
-				if (start[j] % stride[j] != 0 || finish[j] % stride[j] != 0) {
-					NhlPError(NhlFATAL, NhlEUNKNOWN, "VDCReadVar: Stride needs to be aligned with read start and finish indexes."); // TODO VDC
-					return NULL;
-				}
-			}
-
-			while (refLevel > 0) {
-				for (int j = 1; j < numDims; j++)
-					if (stride[j] % 2 == 1)
-					   goto _strideEnd;	
-
-				for (int j = 1; j < numDims; j++) {
-					stride[j] /= 2;
-					size[j]   /= 2;
-					finish[j]  = start[j] + ((finish[j] - start[j]) / 2);
-				}
-				refLevel--;
-			}
-_strideEnd: ;
-
-			// else {
-			// 	for (int j = 1; j < numDims; j++) {
-			// 		if (stride[j] != 1) {
-			// 			NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCReadVar: "); // TODO VDC
-			// 			break;
-			// 		}
-			// 	}
-			// }
-
-			size_t loadSize = 1;
-			for (int j = 1; j < numDims; j++) loadSize *= size[j];
-			float *in = malloc(sizeof(float)*loadSize);
-
-			for (int t = start[0]; t <= finish[0]; t += stride[0]) {
-				VDC_GetVarAtTimeStep(p, t, NrmQuarkToString(thevar), refLevel, rec->levelOfDetail, in);
-
-				if (numDims == 2) { // Start at 2D because fake time dimension is added to 1D data
-					long ti = ((t - start[0]) / stride[0]) * count[1];
-					for (int x = start[1]; x <= finish[1]; x += stride[1]) {
-						out[ti + ((x - start[1]) / stride[1])] = in[x];
+					if (xR == 1) {
+						const int nSrc = xC;
+						const int nDst = xRC-xRS;
+						const int n = nDst < nSrc ? nDst : nSrc;
+						memcpy(&out[yi], &in[yIni + xRS], sizeof(float) * n);
+						x = n;
+					} else {
+						for (x = 0; x < xC && xRS + x*xR < xRC; x++)
+							out[yi + x] = in[yIni + xRS + x*xR];
 					}
-				}
-				else if (numDims == 3) {
-					long ti = ((t - start[0]) / stride[0]) * count[1] * count[2];
-					for (int y = start[1]; y <= finish[1]; y += stride[1]) {
-						long yi = ti + ((y - start[1]) / stride[1]) * count[2];
-						for (int x = start[2]; x <= finish[2]; x += stride[2]) {
-							out[yi + ((x - start[2]) / stride[2])] = in[y*size[2] + x];
-						}
-					}
-				}
-				else if (numDims == 4) {
-					long ti = ((t - start[0]) / stride[0]) * count[1] * count[2] * count[3];
-					for (int z = start[1]; z <= finish[1]; z += stride[1]) {
-						long zi = ti + ((z - start[1]) / stride[1]) * count[2] * count[3];
-						for (int y = start[2]; y <= finish[2]; y += stride[2]) {
-							long yi = zi + ((y - start[2]) / stride[2]) * count[3];
-							for (int x = start[2]; x <= finish[2]; x += stride[2]) {
-								out[yi + ((x - start[3]) / stride[3])] = in[z*size[2]*size[3] + y*size[3] + x];
-							}
-						}
-					}
+					for (; x < xC; x++)
+						out[yi + x] = in[yIni + xRC - 1];
 				}
 			}
-
-			free(in);
-			return out;
+			long ySi = zi + (y-1) * xC;
+			for (; y < yC; y++) {
+				long yi = zi + y * xC;
+				for (x = 0; x < xC; x++)
+					out[yi + x] = out[ySi + x];
+			}
+		}
+		long zSi = ti + (z-1) * yC * xC;
+		for (; z < zC; z++) {
+			long zi = ti + z * yC * xC;
+			for (; y < yC; y++) {
+				long yi = zi + y * xC;
+				long ySi = zSi + y * xC;
+				for (x = 0; x < xC; x++)
+					out[yi + x] = out[ySi + x];
+			}
 		}
 	}
 
-	return NULL;
+	/*
+	// Without refLevel below
+	for (long t = 0; t < tC; t++) {
+		VDC_GetVarAtTimeStep(p, t * tR, NrmQuarkToString(varNameQuark), refLevel, rec->levelOfDetail, in);
+		long ti = t * zC * yC * xC;
+		for (long z = 0; z < zC; z++) {
+			long zi = ti + z * yC * xC;
+			for (long y = 0; y < yC; y++) {
+				long yi = zi + y * xC;
+				for (long x = 0; x < xC; x++) {
+					out[yi + x] = in[((yS+y)*yR)*xRC + (xS+x)*xR];
+				}
+			}
+		}
+	}
+	*/
+
+	free(in);
+	return storage;
 }
+#ifdef in
+#undef in
+#endif
+#pragma GCC diagnostic pop
 
 
 static void *VDCReadCoord (void* therec, NclQuark thevar, long* start, long* finish,long* stride,void* storage)
@@ -1452,13 +1567,13 @@ static NhlErrorTypes VDCSetOption (void *therec,NclQuark option, NclBasicDataTyp
 
 	if (option ==  NrmStringToQuark("levelofdetail")) {
 		int val = *(int*)values;
-		if (val >= -1) {
-			rec->levelOfDetail = val;
-			VDC_DEBUG_printff(": %s = %i\n", NrmQuarkToString(option), rec->levelOfDetail);
-		} else {
-	 		NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value cannot be less than -1", NrmQuarkToString(option));
-	 		return NhlWARNING;
-		}
+		// if (val >= -1) {
+		rec->levelOfDetail = val;
+		VDC_DEBUG_printff(": %s = %i\n", NrmQuarkToString(option), rec->levelOfDetail);
+		// } else {
+	 	// 	NhlPError(NhlWARNING,NhlEUNKNOWN, "VDCSetOption: option (%s) value cannot be less than -1", NrmQuarkToString(option));
+	 	// 	return NhlWARNING;
+		// }
 	}
 	else if (option ==  NrmStringToQuark("compressionenabled")) {
 		int val = *(int*)values;
