@@ -1,0 +1,28 @@
+name: ncl_build
+channels:
+  - conda-forge
+dependencies:
+  - toolchain_c_linux-64
+  - toolchain_fort_linux-64
+  - pkg-config
+  - blas=1.1=openblas
+  - bzip2
+  - cairo
+  - curl
+  - freetype
+  - gsl
+  - hdf4
+  - hdf5
+  - hdfeos2
+  - hdfeos5
+  - jasper
+  - jpeg
+  - libgdal
+  - libiconv
+  - libnetcdf
+  - libpng
+  - pixman
+  - proj4
+  - udunits2
+  - zlib
+  - flex
