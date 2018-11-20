@@ -2,6 +2,7 @@ name: ncl_build
 channels:
   - conda-forge
 dependencies:
+  - gcc
   - toolchain_c_osx-64
   - toolchain_fort_osx-64
   - pkg-config
