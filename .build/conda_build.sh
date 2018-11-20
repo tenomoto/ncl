@@ -1,17 +1,17 @@
 #!/bin/sh
 unsetopt EQUALS 2>/dev/null
 
-conda env create -f envs/`uname`.yml 2>/dev/null
-source activate ncl_build 2>/dev/null || conda activate ncl_build
-
 RECIPE_DIR="$(dirname "$0")"
 export SRC_DIR="$(cd `dirname ${RECIPE_DIR}`; pwd)"
 export RECIPE_DIR="${SRC_DIR}/$(basename "${RECIPE_DIR}")"
-export PREFIX="${CONDA_PREFIX}"
 
 cd ${SRC_DIR}
 
+conda env create -f "${RECIPE_DIR}/envs/`uname`.yml" 2>/dev/null
+source activate ncl_build 2>/dev/null || conda activate ncl_build
 
+
+export PREFIX="${CONDA_PREFIX}"
 export CC="gcc"
 export CXXFLAGS="-fPIC $CXXFLAGS"
 export LDFLAGS="-L${PREFIX}/lib $LDFLAGS"

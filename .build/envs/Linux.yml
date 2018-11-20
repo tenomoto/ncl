@@ -26,3 +26,4 @@ dependencies:
   - udunits2
   - zlib
   - flex
+  - xorg-libxmu
