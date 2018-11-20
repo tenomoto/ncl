@@ -21,6 +21,11 @@ jobs:
       - checkout
 
       - run:
+          name: install csh
+          command: |
+            sudo apt install tcsh
+
+      - run:
           name: install conda
           command: |
             echo "Installing a fresh version of Miniconda."
