@@ -20,19 +20,32 @@ jobs:
     steps:
       - checkout
 
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum ".build/envs/Linux.yml" }}
+
       - run:
           name: install csh
           command: |
             sudo apt install tcsh
 
       - run:
-          name: install conda
+          name: install conda and dependencies
           command: |
+            test -d ~/miniconda3 && echo "conda was restored from cache" && exit 0
             echo "Installing a fresh version of Miniconda."
             MINICONDA_URL="https://repo.continuum.io/miniconda"
             MINICONDA_FILE="Miniconda3-latest-Linux-x86_64.sh"
             curl -L -O "${MINICONDA_URL}/${MINICONDA_FILE}"
             bash $MINICONDA_FILE -b
+            source ~/miniconda3/bin/activate root
+            conda env create -f .build/envs/Linux.yml
+
+      - save_cache:
+          paths:
+            - ~/miniconda3
+          key: v1-dependencies-{{ checksum ".build/envs/Linux.yml" }}
 
       - run:
           name: build ncl
