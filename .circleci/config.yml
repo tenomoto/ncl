@@ -53,6 +53,12 @@ jobs:
             source ~/miniconda3/bin/activate root
             bash .build/conda_build.sh
 
+      - run:
+          name: run tests
+          command: |
+            source ~/miniconda3/bin/activate ncl_build
+            test `ncl -V` = `cat version`
+
       - store_artifacts:
           path: test-reports
           destination: test-reports
