@@ -64,5 +64,5 @@ jobs:
             bash run_tests.bash
 
       - store_artifacts:
-          path: test-reports
+          path: ncl_ci_test/nug/bad
           destination: test-reports
