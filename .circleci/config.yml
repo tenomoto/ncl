@@ -42,7 +42,6 @@ jobs:
             source ~/miniconda3/bin/activate root
             conda env create -f .build/envs/Linux.yml
             conda install -n ncl_build -c conda-forge imagemagick esmf
-            sh -c "${CIRCLE_COMMAND_1}"
 
       - save_cache:
           paths:
@@ -53,6 +52,7 @@ jobs:
           name: build ncl
           command: |
             source ~/miniconda3/bin/activate root
+            sh -c "${CIRCLE_COMMAND_1}"
             bash .build/conda_build.sh
 
       - run:
