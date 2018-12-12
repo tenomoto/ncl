@@ -41,12 +41,13 @@ jobs:
             bash $MINICONDA_FILE -b
             source ~/miniconda3/bin/activate root
             conda env create -f .build/envs/Linux.yml
-            conda install -n ncl_build -c conda-forge imagemagick
+            conda install -n ncl_build -c conda-forge imagemagick esmf
+            sh -c "${CIRCLE_COMMAND_1}"
 
       - save_cache:
           paths:
             - ~/miniconda3
-          key: v1-dependencies-{{ checksum ".build/envs/Linux.yml" }}
+          key: v1-dependencies-{{ checksum ".build/envs/Linux.yml" }}-{{ checksum ".circleci/config.yml" }}
 
       - run:
           name: build ncl
