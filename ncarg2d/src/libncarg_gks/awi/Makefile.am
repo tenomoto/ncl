@@ -4,6 +4,15 @@
 # Build this convenience library.
 noinst_LTLIBRARIES = libncarg_awi.la
 
+# Find gks.h.
+AM_CPPFLAGS = -I$(top_srcdir)/ncarg2d/src/libncarg_gks
+
+# Find c.h.
+AM_CPPFLAGS += -I$(top_srcdir)/common/src/libncarg_c
+
+# Find ncargC.h.
+AM_CPPFLAGS += -I$(top_srcdir)/ncarg2d/src/libncarg
+
 # Sources for convenience library.
 libncarg_awi_la_SOURCES = gactm.f gacwk.f gaspar.f gatelm.f gca.f	\
 gcelcd.f gceldc.f gceldr.f gclks.f gclrwk.f gclsg.f gclwk.f gcrsg.f	\
@@ -32,7 +41,7 @@ gzw2nx.f gzw2ny.f gzxid.f gzacwk.f gzclwk.f gzclrwk.f gzdawk.f		\
 gzopwk.f
 
 ggkwdr_stub.o: ggkwdr_stub.c
-	$(FC) -c ${FCFLAGS} -o $@ $^
+	$(FC) -c ${FCFLAGS} ${AM_CPPFLAGS} -o $@ $^
 
 noinst_HEADERS = gkscom.h trbufr.h trcode.h trdefl.h trinst.h	\
 trpars.h trstat.h

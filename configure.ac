@@ -279,6 +279,7 @@ AC_CONFIG_FILES([Makefile
                  ncarg2d/man/wmap/Makefile
                  ncarg2d/src/Makefile
                  ncarg2d/src/libncarg/Makefile
+                 ncarg2d/src/libncarg/ncarg/ncargC.h:ncarg2d/src/libncarg/ncargC.h
                  ncarg2d/src/libncarg/Iftran/Makefile
                  ncarg2d/src/libncarg/areas/Makefile
                  ncarg2d/src/libncarg/autogrph/Makefile
@@ -349,6 +350,8 @@ AC_CONFIG_FILES([Makefile
                  ncarg2d/src/libncarg/threedC/Makefile
                  ncarg2d/src/libncarg/velvctC/Makefile
                  ncarg2d/src/libncarg/wmapC/Makefile
+                 ncarg2d/src/libncarg_gks/ncarg/gks.h:ncarg2d/src/libncarg_gks/gks.h
+                 ncarg2d/src/libncarg_gks/ncarg/gksP.h:ncarg2d/src/libncarg_gks/cdrivers/gksP.h
                  ncarg2d/src/libncarg_gks/Makefile
                  ncarg2d/src/libncarg_gks/awi/Makefile
                  ncarg2d/src/libncarg_gks/bwi/Makefile
@@ -460,14 +463,19 @@ AC_CONFIG_FILES([Makefile
                  ncarview/src/bin/Makefile
                  ncarview/src/lib/Makefile
                  ncarview/src/lib/libictrans/Makefile
+                 ncarview/src/lib/libcgm/ncarg/cgm_tools.h:ncarview/src/lib/libcgm/cgm_tools.h
                  ncarview/src/lib/libcgm/Makefile
+                 ncarview/src/lib/libcgm/ncarg/cgmdef.h:ncarview/src/lib/libcgm/cgmdef.h
                  ncarview/src/lib/libctrans/Makefile
+                 ncarview/src/lib/libctrans/ncarg/ctrans.h:ncarview/src/lib/libctrans/ctrans.h
                  ncarview/src/lib/libncarg_ras/Makefile
+                 ncarview/src/lib/libncarg_ras/ncarg/ncarg_ras.h:ncarview/src/lib/libncarg_ras/ncarg_ras.h
                  ncarview/src/Makefile
                  ncarview/app/Makefile
                  ngmath/src/bin/Makefile
                  ngmath/src/bin/nnalg/Makefile
                  ngmath/src/lib/Makefile
+                 ngmath/src/lib/ncarg/ngmath.h:ngmath/src/lib/ngmath.h.in
                  ngmath/src/lib/gridpack/Makefile
                  ngmath/src/lib/gridpack/csagrid/Makefile
                  ngmath/src/lib/gridpack/cssgrid/Makefile
@@ -493,6 +501,17 @@ AC_CONFIG_FILES([Makefile
                  ngmath/Makefile
                  ni/src/lib/Makefile
                  ni/src/lib/hlu/Makefile
+                 ni/src/lib/hlu/ncarg/hlu/hlu.h:ni/src/lib/hlu/hlu.h
+                 ni/src/lib/hlu/ncarg/hlu/hluP.h:ni/src/lib/hlu/hluP.h
+                 ni/src/lib/hlu/ncarg/hlu/defs.h:ni/src/lib/hlu/defs.h
+                 ni/src/lib/hlu/ncarg/hlu/NgSizeT.h:ni/src/lib/hlu/NgSizeT.h
+                 ni/src/lib/hlu/ncarg/hlu/Error.h:ni/src/lib/hlu/Error.h
+                 ni/src/lib/hlu/ncarg/hlu/Base.h:ni/src/lib/hlu/Base.h
+                 ni/src/lib/hlu/ncarg/hlu/BaseP.h:ni/src/lib/hlu/BaseP.h
+                 ni/src/lib/hlu/ncarg/hlu/ResList.h:ni/src/lib/hlu/ResList.h
+                 ni/src/lib/hlu/ncarg/hlu/NresDB.h:ni/src/lib/hlu/NresDB.h
+                 ni/src/lib/hlu/ncarg/hlu/Callbacks.h:ni/src/lib/hlu/Callbacks.h
+                 ni/src/lib/hlu/ncarg/hlu/ConvertP.h:ni/src/lib/hlu/ConvertP.h
                  ni/src/lib/nfpfort/Makefile
                  ni/src/lib/nio/Makefile
                  ni/src/lib/nfp/Makefile
