@@ -718,7 +718,6 @@ AC_CONFIG_FILES([Makefile
                  ni/src/ncl/ncarg/ncl/Keywords.h:ni/src/ncl/Keywords.h
                  ni/src/ncl/ncarg/ncl/ListSupport.h:ni/src/ncl/ListSupport.h
                  ni/src/ncl/ncarg/ncl/Machine.h:ni/src/ncl/Machine.h
-                 ni/src/ncl/ncarg/ncl/MathFuncs.h:ni/src/ncl/MathFuncs.h
                  ni/src/ncl/ncarg/ncl/mpi_128_gtb.h:ni/src/ncl/mpi_128_gtb.h
                  ni/src/ncl/ncarg/ncl/mpi_180_gtb.h:ni/src/ncl/mpi_180_gtb.h
                  ni/src/ncl/ncarg/ncl/mpi_181_gtb.h:ni/src/ncl/mpi_181_gtb.h
@@ -766,32 +765,12 @@ AC_CONFIG_FILES([Makefile
                  ni/src/ncl/ncarg/ncl/NclOneDValCoordData.h:ni/src/ncl/NclOneDValCoordData.h
                  ni/src/ncl/ncarg/ncl/NclOptions.h:ni/src/ncl/NclOptions.h
                  ni/src/ncl/ncarg/ncl/NclProf.h:ni/src/ncl/NclProf.h
-                 ni/src/ncl/ncarg/ncl/NclTypebyte.h:ni/src/ncl/NclTypebyte.h
-                 ni/src/ncl/ncarg/ncl/NclTypechar.h:ni/src/ncl/NclTypechar.h
-                 ni/src/ncl/ncarg/ncl/NclTypedouble.h:ni/src/ncl/NclTypedouble.h
-                 ni/src/ncl/ncarg/ncl/NclTypefloat.h:ni/src/ncl/NclTypefloat.h
-                 ni/src/ncl/ncarg/ncl/NclType.h:ni/src/ncl/NclType.h
-                 ni/src/ncl/ncarg/ncl/NclTypeint64.h:ni/src/ncl/NclTypeint64.h
-                 ni/src/ncl/ncarg/ncl/NclTypeint.h:ni/src/ncl/NclTypeint.h
-                 ni/src/ncl/ncarg/ncl/NclTypelist.h:ni/src/ncl/NclTypelist.h
-                 ni/src/ncl/ncarg/ncl/NclTypelogical.h:ni/src/ncl/NclTypelogical.h
-                 ni/src/ncl/ncarg/ncl/NclTypelong.h:ni/src/ncl/NclTypelong.h
-                 ni/src/ncl/ncarg/ncl/NclTypeobj.h:ni/src/ncl/NclTypeobj.h
-                 ni/src/ncl/ncarg/ncl/NclTypeshort.h:ni/src/ncl/NclTypeshort.h
-                 ni/src/ncl/ncarg/ncl/NclTypestring.h:ni/src/ncl/NclTypestring.h
-                 ni/src/ncl/ncarg/ncl/NclTypeubyte.h:ni/src/ncl/NclTypeubyte.h
-                 ni/src/ncl/ncarg/ncl/NclTypeuint64.h:ni/src/ncl/NclTypeuint64.h
-                 ni/src/ncl/ncarg/ncl/NclTypeuint.h:ni/src/ncl/NclTypeuint.h
-                 ni/src/ncl/ncarg/ncl/NclTypeulong.h:ni/src/ncl/NclTypeulong.h
-                 ni/src/ncl/ncarg/ncl/NclTypeushort.h:ni/src/ncl/NclTypeushort.h
                  ni/src/ncl/ncarg/ncl/NclVar.h:ni/src/ncl/NclVar.h
                  ni/src/ncl/ncarg/ncl/OpsFuncs.h:ni/src/ncl/OpsFuncs.h
                  ni/src/ncl/ncarg/ncl/OpsList.h:ni/src/ncl/OpsList.h
-                 ni/src/ncl/ncarg/ncl/parser.h:ni/src/ncl/parser.h
                  ni/src/ncl/ncarg/ncl/SrcTree.h:ni/src/ncl/SrcTree.h
                  ni/src/ncl/ncarg/ncl/Symbol.h:ni/src/ncl/Symbol.h
                  ni/src/ncl/ncarg/ncl/tables.h:ni/src/ncl/tables.h
-                 ni/src/ncl/ncarg/ncl/TypeSupport.h:ni/src/ncl/TypeSupport.h
                  ni/src/ncl/ncarg/ncl/VarSupport.h:ni/src/ncl/VarSupport.h
                  ni/src/ncl/Makefile
                  ni/src/nyacc/Makefile
