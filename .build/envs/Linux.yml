@@ -29,3 +29,5 @@ dependencies:
   - flex
   - xorg-libxaw
   - xorg-libxmu
+  - xorg-makedepend
+  - xorg-imake
