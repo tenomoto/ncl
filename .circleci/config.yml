@@ -41,7 +41,7 @@ jobs:
             bash $MINICONDA_FILE -b
             source ~/miniconda3/bin/activate root
             conda env create -f .build/envs/Linux.yml
-            conda install -n ncl_build -c conda-forge imagemagick esmf
+            conda install -n ncl_build -c conda-forge imagemagick esmf libgdal=2.4
 
       - save_cache:
           paths:
