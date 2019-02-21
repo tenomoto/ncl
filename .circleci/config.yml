@@ -26,9 +26,9 @@ jobs:
           - v1-dependencies-{{ checksum ".build/envs/Linux.yml" }}-{{ checksum ".circleci/config.yml" }}
 
       - run:
-          name: install csh
+          name: install csh and byacc
           command: |
-            sudo apt install tcsh
+            sudo apt install tcsh byacc
 
       - run:
           name: install conda and dependencies
