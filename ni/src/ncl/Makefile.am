@@ -36,6 +36,14 @@ AM_LDFLAGS += ${top_builddir}/ncarg2d/src/libncarg_gks/libncarg_gks.la
 # Link to ngmath library.
 AM_LDFLAGS += ${top_builddir}/ngmath/src/lib/gridpack/libngmath.la
 
+# Link to external libraries.
+AM_LDFLAGS += ${top_builddir}/ngmath/src/lib/gridpack/libngmath.la
+AM_LDFLAGS += ${top_builddir}/external/blas/libblas_ncl.la
+AM_LDFLAGS += ${top_builddir}/external/fftpack5_dp/libfftpack5_dp.la
+AM_LDFLAGS += ${top_builddir}/external/lapack/liblapack_ncl.la
+AM_LDFLAGS += ${top_builddir}/external/sphere3.1_dp/libsphere3.1_dp.la
+AM_LDFLAGS += ${top_builddir}/ni/src/lib/nfp/libnfp.la
+
 CREATED_FILES = parser.h TypeSupport.h TypeSupport.c			\
 NclMultiDValData.c MathFuncs.c MathFuncs.h NclTypedouble.h		\
 NclTypedouble.c NclTypefloat.h NclTypefloat.c NclTypeint.h		\
@@ -45,7 +53,7 @@ NclTypestring.c NclTypeobj.h NclTypeobj.c NclTypechar.h NclTypechar.c	\
 NclTypebyte.h NclTypebyte.c NclTypeint64.h NclTypeint64.c		\
 NclTypeushort.h NclTypeushort.c NclTypeuint.h NclTypeuint.c		\
 NclTypeulong.h NclTypeulong.c NclTypeuint64.h NclTypeuint64.c		\
-NclTypeubyte.h NclTypeubyte.c
+NclTypeubyte.h NclTypeubyte.c scanapi.c parseapi.c
 
 AddBuiltIns.c: $(CREATED_FILES)
 
