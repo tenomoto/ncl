@@ -21915,3 +21915,109 @@ begin
 
   return([/prain, psnow /])  ; return as list
 end
+;============================================
+undef("cube_root")
+function cube_root( x:numeric )
+local xSign, x3
+begin
+  xSign = where(x.lt.0, -1, 1)
+  x3    = xSign*abs(x)^(1.0/3.0)
+  copy_VarCoords(x, x3)
+  return(x3)
+end
+;============================================
+undef("cdpidx")
+function cdpidx(vm:numeric, vt:numeric, rh:numeric, con[4]:numeric)
+;
+; Cyclone Damage Potential Index (CDPI)
+;
+; The CDPI provides a first-order assessment of damage potential arising from winds, sea state 
+; and storm surge, but not rainfall. It does not refer to actual damage but is intended to 
+; provide easily communicated indications of the relative damage potential for individual 
+; storms or for collections of storms over defined regions or seasons. Actual damage 
+; assessment and prediction requires an assessment of vuln
+;
+; Variable Nomenclature:
+;    vm - Maximum wind speed
+;    vt - Translation (storm) speed. 
+;    rh - Radius (extent) of Hurricane-force winds
+;    con- Allows for different constants:
+;         (a) Holland et al used the following constants for NAUTICAL units:     
+;             The CDP is normalized to extend from 0-10, and for vt<5 kt set vt=5. 
+;             cdpi = cdpidx(vm, vt, rh, (/4.0, 65.0, 50.0, 5.0/))   
+;         (b) Bruyere et al used the following for metric [?] units:     
+;             cdpi = cdpidx(vm, vt, rh, (/7.4, 33.0, 5.0, 18.5/))   
+;
+; References:
+; Holland, G.J., J.M. Done, M. Ge, and R. Douglas, 2016: 
+; https://ams.confex.com/ams/32Hurr/webprogram/Paper293660.html
+;              
+; Holland & Bruyere (2014): Climate Dynamics February 2014, Volume 42, Issue 3–4, pp 617–627 
+; Recent intense hurricane response to global climate change
+;
+; Bruyere et al (2016): Impact of Climate Change on Gulf of Mexico Hurricanes
+; NCAR Technical Notes NCAR/TN535+STR
+;
+; From Bruyere et al (2016):
+; "TC potential damage is not just a function of TC intensity, but also TC size 
+;  and forward speed. .....
+;  The CDP index assesses the capacity of a TC to cause damage and represents 
+;  offshore wind, wave and current damage and onshore wind and coastal surge damage. 
+;  The actual damage depends on the specific exposure and vulnerability. Developed 
+;  through a combination of physical reasoning and limited tuning to 
+;  available offshore damage data, the resulting CDP index is as follows:"
+;
+;        cdpi = 7.4*( (vm/33.0)^3 + 5*(rh/18.5))/VT
+; or (NCL)
+;        cdpi = cdpidx(vm, vt, rh, (/7.4, 33.0, 5.0, 18.5/))   
+;
+; The denominators are to normalize each term to be a similar magnitude and the coefficient 
+; at the front is to scale the index between 0 and 10. The index can be interpreted as a 
+; measure of the duration of damaging winds.
+; 
+local dim_vm, dim_vt, dim_rh, rnk_vm, rnk_vt, rnk_rh, VT, VTF, cdp
+begin
+
+  if (any(con.le.0)) then
+      print("function cdpidx: FATAL: : a con value <= 0 "+con) 
+      exit
+  end if
+  dim_vm = dimsizes(vm)
+  dim_vt = dimsizes(vt)
+  dim_rh = dimsizes(rh)
+  rnk_vm = dimsizes(dim_vm)
+  rnk_vt = dimsizes(dim_vt)
+  rnk_rh = dimsizes(dim_rh)
+
+  if (.not.(rnk_vm.eq.rnk_vt .and. rnk_vm.eq.rnk_rh)) then
+      print("function cdpidx: FATAL: ranks do not conform: "+ \
+            " rank_vm="+rank_vm+" rank_vt="+rank_vt+" rank_rh="+rank_rh)
+      exit
+  end if
+  if (.not.(all(dim_vm.eq.dim_vt) .and. all(dim_vm.eq.dim_rh))) then
+      print("function cdpi: FATAL: dimension sizes not equal: "+ \
+            " dimsizes(vm)="+dim_vm + \
+            " dimsizes(vt)="+dim_vt + \
+            " dimsizes(rh)="+dim_rh   )
+      exit
+  end if
+
+  if (any(vt.eq.0)) then
+      if (isatt(vt,"_FillValue")) then
+          VT  = where(vt.eq.0, vt@_FillValue, vt)
+      else
+          VTF = totype(9999,vt)
+          VT = where(vt.eq.0, VTF, vt)
+          VT@_FillValue = VTF
+      end if
+      cdp = con(0)*( (vm/con(1))^3 + con(2)*(rh/con(3)))/VT
+  else
+      cdp = con(0)*( (vm/con(1))^3 + con(2)*(rh/con(3)))/vt
+  end if
+  
+  cdp@long_name = "Cyclone Damage Potential Index"
+  cdp@ref_1     = "Holland et al: https://ams.confex.com/ams/32Hurr/webprogram/Paper293660.html"
+  cdp@ref_2     = "Bruyere et al (2016): Impact of Climate Change on Gulf of Mexico Hurricanes; ; NCAR/TN535+STR"
+  copy_VarCoords(vm, cdp)
+  return(cdp)
+end
