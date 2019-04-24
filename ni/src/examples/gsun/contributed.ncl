@@ -21821,6 +21821,8 @@ undef("precip_rain_snow")
 function precip_rain_snow(prc:numeric, tmp:numeric \
                          ,train:numeric, tsnow:numeric)
 ;
+; For historical reasons, this is identical to rain_snow_mwbm.ncl
+;
 ; Partition a monthly precipitation total into rain and snow totals
 ; using the empirical methodology used by the USGS Monthly Water-Balance Model .
 ;
@@ -21918,16 +21920,33 @@ end
 ;============================================
 undef("cube_root")
 function cube_root( x:numeric )
-local xSign, x3
+;
+; Calculate the 'principal cube root' 
+;
+local xSign, pow, x3
 begin
   xSign = where(x.lt.0, -1, 1)
-  x3    = xSign*abs(x)^(1.0/3.0)
+  if (typeof(x).eq."double") then 
+      pow = 1d0/3d0
+  else
+      pow = 1.0/3.0
+  end if
+  x3 = xSign*abs(x)^pow
+  if (isatt(x,"long_name")) then
+      x3@long_name = "cube root: "+x@long_name
+  else
+      x3@long_name = "cube root"
+  end if
+  if (isatt(x,"units")) then
+      x3@units = "cube root: "+x@units
+  end if
+   
   copy_VarCoords(x, x3)
   return(x3)
 end
 ;============================================
 undef("cdpidx")
-function cdpidx(vm:numeric, vt:numeric, rh:numeric, con[4]:numeric)
+function cdpidx(vm:numeric, vt:numeric, rh:numeric, con[4]:numeric, opt[1]:logical)
 ;
 ; Cyclone Damage Potential Index (CDPI)
 ;
@@ -21938,15 +21957,16 @@ function cdpidx(vm:numeric, vt:numeric, rh:numeric, con[4]:numeric)
 ; assessment and prediction requires an assessment of vuln
 ;
 ; Variable Nomenclature:
-;    vm - Maximum wind speed
-;    vt - Translation (storm) speed. 
-;    rh - Radius (extent) of Hurricane-force winds
+;    vm - Maximum wind speed  (knots)
+;    vt - Translation (storm) speed (knots)
+;    rh - Radius (extent) of Hurricane-force winds (nautical miles)
 ;    con- Allows for different constants:
 ;         (a) Holland et al used the following constants for NAUTICAL units:     
 ;             The CDP is normalized to extend from 0-10, and for vt<5 kt set vt=5. 
 ;             cdpi = cdpidx(vm, vt, rh, (/4.0, 65.0, 50.0, 5.0/))   
-;         (b) Bruyere et al used the following for metric [?] units:     
+;         (b) Bruyere et al used the following for ?] units in the Gulf of Mexico:     
 ;             cdpi = cdpidx(vm, vt, rh, (/7.4, 33.0, 5.0, 18.5/))   
+;    opt- Currently, not used. Set to False.
 ;
 ; References:
 ; Holland, G.J., J.M. Done, M. Ge, and R. Douglas, 2016: 
@@ -22002,19 +22022,13 @@ begin
       exit
   end if
 
-  if (any(vt.eq.0)) then
-      if (isatt(vt,"_FillValue")) then
-          VT  = where(vt.eq.0, vt@_FillValue, vt)
-      else
-          VTF = totype(9999,vt)
-          VT = where(vt.eq.0, VTF, vt)
-          VT@_FillValue = VTF
-      end if
-      cdp = con(0)*( (vm/con(1))^3 + con(2)*(rh/con(3)))/VT
-  else
-      cdp = con(0)*( (vm/con(1))^3 + con(2)*(rh/con(3)))/vt
-  end if
-  
+; Holland et al  (2016)
+; Nautical units are used, the CDP is normalized to extend from 0-10, 
+; and for vt<5 kt set vt=5.
+
+  VT  = where(vt.gt.5, vt, totype(5, typeof(vt)) )
+
+  cdp = con(0)*( (vm/con(1))^3 + con(2)*(rh/con(3)))/VT
   cdp@long_name = "Cyclone Damage Potential Index"
   cdp@ref_1     = "Holland et al: https://ams.confex.com/ams/32Hurr/webprogram/Paper293660.html"
   cdp@ref_2     = "Bruyere et al (2016): Impact of Climate Change on Gulf of Mexico Hurricanes; ; NCAR/TN535+STR"

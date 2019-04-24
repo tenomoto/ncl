@@ -2245,7 +2245,9 @@ begin
    x       = x*conv(units_in_row, units_out_col)
    x@units = units_col(units_out_col)
 end
-;========================================================================
+;==========================================================
+;            Maonthly Water Balance Model
+;==========================================================
 undef("refevt_hamon_mwbm")
 function refevt_hamon_mwbm(tmean:numeric, daylight:numeric, iounit[2]:integer)
 ;
@@ -2469,4 +2471,472 @@ begin
   psnow@mwbm      = "Monthly Water-Balance Model"
 
   return([/prain, psnow /])  ; return as list
+end
+;=====================================================================
+undef("mwbm_driver")
+function mwbm_driver(prc:numeric, tmp:numeric, pet:numeric, snow:numeric \
+                    ,lsmask:numeric,  opt:logical)
+;
+; MWBM driver for one of the USGS water balance models
+;
+; REFERENCE:
+; A Monthly Water-Balance Model Driven By a Graphical User Interface
+; https://pubs.usgs.gov/of/2007/1088/pdf/of07-1088_508.pdf
+; tmp: degC ; train=3.3C; tsnow=-10C are typical values
+;
+; This function allows the user to input PET derived from NCL's suite of
+; 'PET' functions. The REFERENCE uses 'refevt_hamon_mwbm'
+; ' 
+; Nomenclature:
+; prc   - total monthly precipitation [rain and snow]: mm
+; tmp   - mean monthly temperature: degC 
+; pet   - monthly estimate of potential evaotranspirarion [mm]
+; snow  - total monthly snow (melted):  mm
+; lsmask- land (1) -sea (0) mask: no computations for sea locations 
+;       - If lsmask=-1 all locations will have the water balance computed
+;
+local rank_prc, rank_tmp, rank_pet, rank_sno, dim_prc, dim_tmp, dim_pet, dim_sno      \
+    , type_prc, type_tmp, type_pet, type_sno, type_data, type_fill, dim_data \
+    , TSNOW, TRAIN, WHC, DROFRAC, RUNOFF_FACTOR, MELTMAX, STC, ELEV\
+    , snstor, prestor, remain, aet, sms, rodirect, deficit, nt, lsm\
+    , surplus, smeltf, smelt, prain, psnow, pmpe, runoff           \
+    , delsnstor, directfac, np, nl, ml, nlat,mlon       \  
+
+begin
+  dim_prc  = dimsizes(prc)                  ; sizes
+  dim_tmp  = dimsizes(tmp)
+  dim_pet  = dimsizes(pet)
+  dim_sno  = dimsizes(snow)
+
+  rank_prc = dimsizes(dim_prc)              ; array ranks; here all 1
+  rank_tmp = dimsizes(dim_tmp)
+  rank_pet = dimsizes(dim_pet)
+  rank_sno = dimsizes(dim_sno)
+
+  type_prc = typeof(dim_prc)                ; data types
+  type_tmp = typeof(dim_tmp)
+  type_pet = typeof(dim_pet)
+  type_sno = typeof(dim_sno)
+                                            ; error testing
+  if (rank_prc.ne.rank_tmp .or. rank_prc.ne.rank_pet .or. rank_prc.ne.rank_sno) then
+      print("mwbm_driver: prc, tmp, pet and psnow have different ranks:")
+      print("             rank_prc="+rank_prc)
+      print("             rank_tmp="+rank_tmp)
+      print("             rank_tmp="+rank_pet)
+      print("             rank_sno="+rank_sno)
+      exit
+  end if
+  if (.not.all(dim_prc.eq.dim_tmp)) then
+      print("mwbm_driver: prc and tmp have different sizes:")
+      print("             dim_prc="+dim_prc+"   dim_tmp="+dim_tmp)
+      exit
+  end if
+  if (.not.all(dim_prc.eq.dim_pet)) then
+      print("mwbm_driver: prc and pet have different sizes:")
+      print("             dim_prc="+dim_prc+"   dim_pet="+dim_pet)
+      exit
+  end if
+  if (.not.all(dim_prc.eq.dim_sno)) then
+      print("mwbm_driver: prc and snow have different sizes:")
+      print("               dim_prc="+dim_prc+"   dim_sno="+dim_sno)
+      exit
+  end if
+                         ; adjust for variety of input types
+  if (any( (/type_tmp, type_prc, type_pet, type_sno/).eq."double") ) then
+      type_data = "double"
+      type_fill = -999.0d
+  else
+      type_data = "float"    ; typeof(1.0)
+      type_fill = -999.0
+  end if
+
+  dim_data  = dim_prc        ; generic name
+  rank_data = rank_prc
+
+;========================================================
+; DEFAULT GUI PARAMWTERS
+;========================================================
+
+  TRAIN             = totype(3.3, type_data)
+  TRAIN@long_name   = "Rain Threshold Temperature"
+  TRAIN@units       = "degC"
+
+  TSNOW             = totype(-10.0, type_data)   ; stations under 1000m                      
+  TSNOW@long_name   = "Snow Threshold Temperature"
+  TSNOW@units       = "degC"
+
+; Soil Water Holding Capacity - amount of water that a given soil can hold for crop use. 
+
+  WHC               = totype(200.0, type_data)   ; related the (Soil Moisture Capacity)
+  WHC@long_name     = "Water Holding Capacity"  
+  WHC@units         = "mm"                     
+
+  DROFRAC           = totype(0.05, type_data) ; page 2 of reference; "drofrac"                      
+  DROFRAC@long_name = "Direct Runoff Factor"
+  DROFRAC@units     = "fraction: 0-to-1"
+
+  RUNOFF_FACTOR     = totype(0.50, type_data) ; page 3 of reference; "rfactor"
+  RUNOFF_FACTOR@long_name = "Runoff Factor"
+  RUNOFF_FACTOR@units  = "fraction: 0-to-1"
+
+  MELTMAX           = totype(0.50, type_data)    ; page 2 of reference                       
+  MELTMAX@long_name = "Snow Melt Rate"
+  MELTMAX@units     = "fraction: 0-to-1"
+
+  REMAIN           = totype(25.0 , type_data) 
+  REMAIN@long_name = "Remaining snow amount"
+  REMAIN@units     = "mm"
+                                             
+  PRESTOR          = totype(150.0 , type_data)   
+  PRESTOR@long_name= "Initial Soil Moisture"
+  PRESTOR@units    = "mm"
+                                             
+  ELEV             = totype(0.0 , type_data)   
+  ELEV@long_name   = "Elevation"
+  ELEV@units       = "m"
+
+;========================================================
+; ALTER DEFAULT GUI PARAMWTERS
+;========================================================
+
+  if (opt) then
+      if (isatt(opt,"TRAIN")) then
+          TRAIN   := totype(opt@TRAIN, type_data)
+      end if
+      if (isatt(opt,"TSNOW")) then
+          TSNOW   := totype(opt@TSNOW, type_data)
+      end if
+      if (isatt(opt,"WHC")) then
+          WHC     := totype(opt@WHC, type_data)
+      end if
+      if (isatt(opt,"MELTMAX")) then
+          MELTMAX := totype(opt@MELTMAX, type_data)
+      end if
+      if (isatt(opt,"PRESTOR")) then
+          PRESTOR := totype(opt@PRESTOR, type_data)
+      end if
+      if (isatt(opt,"ELEV")) then
+          ELEV    := totype(opt@ELEV, type_data) 
+      end if
+      if (isatt(opt,"DROFRAC")) then
+          DROFRAC := totype(opt@DROFRAC, type_data)
+      end if
+      if (isatt(opt,"RUNOFF_FACTOR")) then
+          RUNOFF_FACTOR := totype(opt@RUNOFF_FACTOR, type_data)
+      end if
+  end if
+
+;========================================================
+; INITIALIZE ARRAY(S)  
+; NOTE 1: If 'type_data' is double, 
+;         the 'float' values will automatically  be promoted to 'double'
+; NOTE 2: Not all need the time steps saved. 
+;         This is for subsequent plotting or archiving.
+;========================================================
+
+  snstor          = new( dim_data, type_data, type_fill)
+  snstor          = 0.0
+  snstor@long_name= "Snow Storage"
+  snstor@units    = "mm"
+
+  smelt           = new( dim_data, type_data, type_fill)
+  smelt           = 0.0
+  smelt@long_name = "Snow Melt"    ; per month
+  smelt@units     = "mm"
+
+  smeltf          = new( dim_data, type_data, type_fill)
+  smeltf          = 0.0
+  smeltf@long_name = "Snow Melt Fraction"
+  smeltf@units     = "mm"
+
+  sms             = new( dim_data, type_data, type_fill)   ; stor
+  sms@long_name   = "Soil Moisture Storage"
+  sms@units       = "mm"   
+
+  aet             = new( dim_data, type_data, type_fill)
+  aet             = 0.0
+  aet@long_name   = "Actual Evapotranspiration"
+  aet@units       = "mm"
+
+  runoff          = new( dim_data, type_data, type_fill)
+  runoff          = 0.0
+  runoff@long_name= "Runoff"
+  runoff@units    = "mm"
+
+  rodirect        = new( dim_data, type_data, type_fill)
+  rodirect        = 0.0
+  rodirect@long_name = "Direct Runoff"
+  rodirect@units  = "mm"
+  rodirect@info   = "Runoff from Impervious Surfaces or Infiltration-Excess Overflow"
+
+  deficit         = new( dim_data, type_data, type_fill)
+  deficit         = 0.0
+  deficit@long_name = "Deficit"
+  deficit@units   = "mm"
+
+  surplus         = new( dim_data, type_data, type_fill)
+  surplus         = 0.0
+  surplus@long_name = "Surplus"
+  surplus@units   = "mm"
+
+  prain           = new( dim_data, type_data, type_fill)
+  prain           = 0.0
+  prain@long_name = "Rain Component"
+  prain@units     = "mm"
+
+  pmpe            = new( dim_data, type_data, type_fill)
+  pmpe            = 0.0
+  pmpe@long_name  = "PMPE: prc-pet"
+  pmpe@units      = "mm"
+
+  prestor         = PRESTOR          ; Use same variable names as source
+  directfac       = DROFRAC 
+  runoffFactor    = RUNOFF_FACTOR
+
+;========================================================
+; Loop over each time step
+;========================================================
+   
+  ntim = dim_data(0)
+
+  if (rank_data.eq.1) then
+      remain = 0.0
+
+    do nt=0,ntim-1
+       prain(nt) = prc(nt)-snow(nt)
+      
+;========================================================
+; Runoff and update snow storage 
+;========================================================
+
+       rodirect(nt)= prain(nt) *directfac     ; Direct Runoff:  Eq (3)      
+       prain(nt)   = prain(nt) -rodirect(nt)  ; remaining rain
+       snstor(nt)  = snstor(nt)+snow(nt)      ; snow accumulates as snstor (page 1)
+      
+;========================================================
+; Snow Melt & update Snow Storage; Update requires loop
+;========================================================
+       
+       if (snstor(nt).gt.0 .and. tmp(nt).gt.TSNOW) then
+           if (snstor(nt).le.10) then
+               smelt(nt)  = snstor(nt)
+           else
+               smeltf(nt) = MELTMAX*((tmp(nt)-TSNOW)/((TRAIN-TSNOW)+0.0001))  ; Eq (5)
+               if (smeltf(nt).gt.MELTMAX) then
+                   smeltf(nt) = MELTMAX               
+               end if
+               smelt(nt)  = smeltf(nt)*snstor(nt)       ; Eq (6) 
+               snstor(nt) = snstor(nt)-smelt(nt)  
+               if (snstor(nt).lt.0.0) then
+                   snstor(nt) = 0.0               
+               end if
+           end if
+       end if
+
+;========================================================
+; Update prain by adding melted snow (ie: remain)
+; netPRC: PMPE (Prc Minus PEt): Convenience (do it once)  Residual
+;========================================================
+
+       prain(nt)   = prain(nt) + smelt(nt)
+       pmpe(nt)    = prain(nt) - pet(nt)    ; net water
+      
+;========================================================
+; Soil Moisture Stirage (sms); AET, Surplus, Deficit
+;========================================================
+
+       if (pmpe(nt).lt.0) then
+           sms(nt) =  prestor - abs((pmpe(nt)*prestor)/WHC)
+           if (sms(nt).lt.0)  then
+               sms(nt) = 0
+           end if
+           delstor = sms(nt)   - prestor       ; change in soil moisture
+           aet(nt) = prain(nt) - delstor       ; JAVA: ae = prain + delstor * (-1.0);
+           prestor = sms(nt)                   ; save for next iteration
+           surplus(nt) = 0.0    
+       else
+           aet(nt)  = pet(nt)
+           sms(nt) = prestor + pmpe(nt)
+           if (sms(nt).gt.WHC) then 
+               surplus(nt) = sms(nt) - WHC   
+               sms(nt)  = WHC
+           end if
+           prestor = sms(nt)                  ; save for next iteration
+       end if
+      
+       deficit(nt) = pet(nt) - aet(nt)
+      
+;========================================================
+; Runoff calculations 
+;========================================================
+      
+       runoff(nt) = (surplus(nt)+remain)*runoffFactor 
+       remain     = (surplus(nt)+remain)-runoff(nt)
+       if (remain.lt.0) then
+           remain = 0
+       end if
+
+       runoff(nt)  = runoff(nt) + rodirect(nt)
+    end do   ; nt
+
+  elseif (rank_data.eq.2) then
+
+    npt     = dim_data(1)
+
+    remain := new( npt, type_data, type_fill)  
+    remain  =  0.0                                   ; 25.4  
+    remain@long_name= "Remain Precip Water"
+    remain@units    = "mm"
+
+    prestor:= new( npt, type_data, type_fill)  
+    prestor =  0.0                   
+    prestor@long_name= "previous snow storage"
+    prestor@units    = "mm"
+
+    if (isscalar(lsmask) .and. lsmask.eq.1) then
+        lsm := new( npt, "integer", "No_FillValue")  
+        lsm  = 1         
+    else
+        lsm  = lsmask
+    end if
+
+    do np=0,npt-1
+       if (lsm(np).eq.1) then
+         do nt=0,ntim-1
+           prain(nt,np)   = prc(nt,np)-snow(nt,np)
+           rodirect(nt,np)= prain(nt,np) *directfac        ; Direct Runoff:  Eq (3)      
+           prain(nt,np)   = prain(nt,np) -rodirect(nt,np)  ; remaining rain
+           snstor(nt,np)  = snstor(nt,np)+snow(nt,np)      ; psnow accumulates as snstor (page 1)
+           if (snstor(nt,np).gt.0 .and. tmp(nt,np).gt.TSNOW(np)) then
+             if (snstor(nt,np).le.10) then
+                 smelt(nt,np)  = snstor(nt,np)
+             else
+                 smeltf(nt,np) = MELTMAX(np)*((tmp(nt,np)-TSNOW(np))/((TRAIN(np)-TSNOW(np))+0.0001))  ; Eq (5)
+                 if (smeltf(nt,np).gt.MELTMAX(np)) then
+                     smeltf(nt,np) = MELTMAX(np)               
+                 end if
+                 smelt(nt,np)  = smeltf(nt,np)*snstor(nt,np)       ; Eq (6) 
+                 snstor(nt,np) = snstor(nt,np)-smelt(nt,np)  
+                 if (snstor(nt,np).lt.0.0) then
+                     snstor(nt,np) = 0.0               
+                 end if
+             end if
+           end if
+           prain(nt,np)   = prain(nt,np) + smelt(nt,np)
+           pmpe(nt,np)    = prain(nt,np) - pet(nt,np)    ; net water
+           if (pmpe(nt,np).lt.0) then
+               sms(nt,np) =  prestor(np) - abs((pmpe(nt,np)*prestor(np))/WHC(np))
+               if (sms(nt,np).lt.0)  then
+                   sms(nt,np) = 0
+               end if
+               delstor = sms(nt,np) - prestor(np)       ; change in soil moisture
+               aet(nt,np)  = prain(nt,np) - delstor       ; JAVA: ae = prain + delstor * (-1.0);
+               prestor(np) = sms(nt,np)                   ; save for next iteration
+               surplus(nt,np) = 0.0    
+           else
+               aet(nt,np) = pet(nt,np)
+               sms(nt,np) = prestor(np) + pmpe(nt,np)
+               if (sms(nt,np).gt.WHC(np)) then 
+                   surplus(nt,np) = sms(nt,np) - WHC(np)   
+                   sms(nt,np)  = WHC(np)
+               end if
+               prestor(np) = sms(nt,np)                  ; save for next iteration
+           end if
+          
+           deficit(nt,np) = pet(nt,np) - aet(nt,np)
+           runoff(nt,np) = (surplus(nt,np)+remain(np))*runoffFactor 
+           remain     = (surplus(nt,np)+remain(np))-runoff(nt,np)
+           if (remain(np).lt.0) then
+               remain(np) = 0
+           end if
+
+           runoff(nt,np)  = runoff(nt,np) + rodirect(nt,np)
+         end do    ; nt [nDim=2]
+       end if      ; lsmask/lsm
+    end do         ; np
+
+  elseif (rank_prc.eq.3) then
+    nlat = dim_data(1)
+    mlon = dim_data(2)
+
+    remain  := new( (/nlat,mlon/), type_data, type_fill)  
+    remain   =  0.0                                   ; 25.4  
+    remain@long_name= "Remain Precip Water"
+    remain@units    = "mm"
+
+    prestor := new( (/nlat,mlon/), type_data, type_fill)  
+    prestor  =  0.0                                   ; 25.4  
+    prestor@long_name= "Remain Precip Water"
+    prestor@units    = "mm"
+
+    if (isscalar(lsmask) .and. lsmask.eq.1) then
+        lsm := new( (/nlat,mlon/), "integer", "No_FillValue")  
+        lsm  = 1         
+    else
+        lsm  = lsmask
+    end if
+ 
+    do nl=0,nlat-1
+      do ml=0,mlon-1
+        if (lsm(nl,ml).eq.1) then
+          do nt=0,ntim-1
+             prain(nt,nl,ml) = prc(nt,nl,ml)-snow(nt,nl,ml)
+             rodirect(nt,nl,ml)= prain(nt,nl,ml) *directfac           ; Direct Runoff:  Eq (3)      
+             prain(nt,nl,ml)   = prain(nt,nl,ml) -rodirect(nt,nl,ml)  ; remaining rain
+             snstor(nt,nl,ml)  = snstor(nt,nl,ml)+snow(nt,nl,ml)      ; psnow accumulates as snstor (page 1)
+             if (snstor(nt,nl,ml).gt.0 .and. tmp(nt,nl,ml).gt.TSNOW) then
+                 if (snstor(nt,nl,ml).le.10) then
+                     smelt(nt,nl,ml)  = snstor(nt,nl,ml)
+                 else
+                     smeltf(nt,nl,ml) = MELTMAX*((tmp(nt,nl,ml)-TSNOW)/((TRAIN-TSNOW)+0.0001))  ; Eq (5)
+                     if (smeltf(nt,nl,ml).gt.MELTMAX) then
+                         smeltf(nt,nl,ml) = MELTMAX               
+                     end if
+                     smelt(nt,nl,ml)  = smeltf(nt,nl,ml)*snstor(nt,nl,ml)       ; Eq (6) 
+                     snstor(nt,nl,ml) = snstor(nt,nl,ml)-smelt(nt,nl,ml)  
+                     if (snstor(nt,nl,ml).lt.0.0) then
+                         snstor(nt,nl,ml) = 0.0               
+                     end if
+                end if
+             end if
+             prain(nt,nl,ml)   = prain(nt,nl,ml) + smelt(nt,nl,ml)
+             pmpe(nt,nl,ml)    = prain(nt,nl,ml) - pet(nt,nl,ml)    ; net water
+;print("nt="+nt+"  nl="+nl+"  ml="+ml+"  "+pmpe(nt,nl,ml)+"  "+prain(nt,nl,ml)+"  "+pet(nt,nl,ml))
+             if (pmpe(nt,nl,ml).lt.0) then
+                 sms(nt,nl,ml) =  prestor(nl,ml) - abs((pmpe(nt,nl,ml)*prestor(nl,ml))/WHC)
+                 if (sms(nt,nl,ml).lt.0)  then
+                     sms(nt,nl,ml) = 0
+                 end if
+                 delstor = sms(nt,nl,ml)   - prestor(nl,ml)       ; change in soil moisture
+                 aet(nt,nl,ml) = prain(nt,nl,ml) - delstor       ; JAVA: ae = prain + delstor * (-1.0);
+                 prestor(nl,ml) = sms(nt,nl,ml)                   ; save for next iteration
+                 surplus(nt,nl,ml) = 0.0    
+            else
+                 aet(nt,nl,ml) = pet(nt,nl,ml)
+                 sms(nt,nl,ml) = prestor(nl,ml) + pmpe(nt,nl,ml)
+                 if (sms(nt,nl,ml).gt.WHC) then 
+                     surplus(nt,nl,ml) = sms(nt,nl,ml) - WHC   
+                     sms(nt,nl,ml)  = WHC
+                 end if
+                 prestor(nl,ml) = sms(nt,nl,ml)                  ; save for next iteration
+            end if
+        
+            deficit(nt,nl,ml) = pet(nt,nl,ml) - aet(nt,nl,ml)
+            runoff(nt,nl,ml) = (surplus(nt,nl,ml)+remain(nl,ml))*runoffFactor 
+            remain     = (surplus(nt,nl,ml)+remain(nl,ml))-runoff(nt,nl,ml)
+            if (remain(nl,ml).lt.0) then
+                remain(nl,ml) = 0
+            end if
+
+            runoff(nt,nl,ml)  = runoff(nt,nl,ml) + rodirect(nt,nl,ml)
+          end do  ; nt
+        end if    ; lsm
+      end do      ; ml
+     end do       ; nl
+
+  end if          ; rank_data
+
+  deficit = where(deficit.lt.0, 0, deficit)    ; rounding
+
+  return ([/pmpe, sms, aet, deficit, snstor, surplus, runoff, rodirect, smelt, prain /] )
 end
