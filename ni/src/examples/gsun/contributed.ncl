@@ -1404,99 +1404,6 @@ begin
   uv@long_name = "zonal [0] and meridional [1] wind components"
   return(uv)
 end
-; *****************************************************************
-; Basic wind related quantities and statistics
-; *****************************************************************
-undef("wind_stats")
-function wind_stats(wspd:numeric, wdir:numeric, nDim[*]:integer, opt[1])
-;
-; Single pass *estimation* of the standard deviation of wind direction:
-; ... Wind speed is a scalar
-; ... Wind direction is circular quantity: [0..360); including 0 but excluding 360 and above
-;     Think discontinuity at 360.
-; ... Function 'wind_stats' uses Yamartino'a single-pass method. Yamartino's algorithm is 
-;     an approximation within 2% of the theoretical distribution.
-; ----
-; The standard deviation of wind direction is a measure of lateral turbulence, 
-; and can be used to estimate the Pasquill stability. 
-; ----
-; References:
-; Yamartino (1984): Journal of Climate and Applied Meteorology , 23, 1362-1366 
-; http://dx.doi.org/10.1175/1520-0450(1984)023<1362:ACOSPE>2.0.CO;2
-;
-; Turner, D.B. (1986): Comparison of Three Methods ...
-; http://journals.ametsoc.org/doi/pdf/10.1175/1520-0450%281986%29025%3C0703%3ACOTMFC%3E2.0.CO%3B2
-
-; Weber, R. (1997): Estimators for the Standard Deviation of Horizontal Wind Direction
-; http://journals.ametsoc.org/doi/pdf/10.1175/1520-0450%281997%29036%3C1403%3AEFTSDO%3E2.0.CO%3B2
-;
-; Wikipedia;
-; https://en.wikipedia.org/wiki/Yamartino_method
-;
-local wspd_avg, wspd_std, wdir_avg, wdir_std \
-    ,  d2r, wrad, wsin, wcos, e, wsrd, uv
-begin
-
-; wind speed average and standard deviation + meta data
-
-  wspd_avg = dim_avg_n_Wrap   (wspd, nDim) 
-  wspd_std = dim_stddev_n_Wrap(wspd, nDim) 
-
-  if (isatt(wspd,"long_name")) then                       ; add meta
-      wspd_avg@long_name = "average: "+wspd@long_name
-      wspd_avg@info_wspd = "average of wind speeds"
-      wspd_std@long_name = "std dev: "+wspd@long_name
-      wspd_std@info_wdir = "average of wind speeds"
-  else
-      wspd_avg@long_name = "average wind speed"
-      wspd_std@long_name = "standard deviation of wind speed"
-  end if
-
-; wind direction: intermediate quantities (see Ymartino)
-
-  d2r  = get_d2r(wdir)
-  wrad = wdir*d2r
-  wsin = dim_avg_n(sin(wrad), nDim)                ; avg sin(wdir) 
-  wcos = dim_avg_n(cos(wrad), nDim)                ;     cos
-  delete(wrad)                                     ; no longer needed
-
-;;mean wind direction: Turner method p707 based on Yamartino
-
-;;wdir_avg = atan2(wsin,wcos)*get_r2d(wspd)        ; average; Yamartino
-;;if (wdir_avg.lt.0) then
-;;    wdir_avg = wdir_avg + 360
-;;end if
-;;wdir_avg@long_name = "wind direction: mean"
-;;wdir_avg@info      = "Yamartino single-pass method"
-
-; mean wind via:  http://www.ndbc.noaa.gov/wndav.shtml
-; (a) compute mean U (avgU) and mean V (avgV)
-; (b) compute mean wind speed via mean components (a)
-; (c) compute mean wind direction via mean components (a)
-
-  uv   = wind_component(wspd, wdir, 1)             ; return list
-                                                   ; explicitly extract: clarity
-  u    = uv[0]                                     ; extract u
-  v    = uv[1]                                     ;         v
-  delete(uv)                                       ; no longer needed
-
-  avgU = dim_avg_n(u, 0)                           ; average u
-  avgV = dim_avg_n(v, 0)                           ;         v
-  avgW = sqrt(avgU^2 + avgV^2)                     ; NOAA
-  dirW = wind_direction(avgU, avgV, 0)             ; 'exact'
-
-; std dev of wind direction (~ within 2% ) ... Yamartino (1984)
-  
-  e    = sqrt(1-(wsin*wsin+wcos*wcos))
-  wdir_std = get_r2d(e)*asin(e)*(1+0.1547*e^3)
-  delete(e)                                        ; no longer needed
-
-  wdir_std@long_name = "wind direction: standard deviation"
-  wdir_std@info      = "Yamartino single-pass method"
-  copy_VarCoords(wspd_avg, wdir_std)
-
-  return ([/wspd_avg, wspd_std,     dirW, wdir_std, avgU, avgV/])  
-end
 ; **************************************************************
 ; D. Shea
 ; Loops thru a 1D variable [eg, time] and finds
@@ -21007,6 +20914,99 @@ begin
 
   copy_VarCoords(t, te)
   return(te)
+end
+; *****************************************************************
+; Basic wind related quantities and statistics
+; *****************************************************************
+undef("wind_stats")
+function wind_stats(wspd:numeric, wdir:numeric, nDim[*]:integer, opt[1])
+;
+; Single pass *estimation* of the standard deviation of wind direction:
+; ... Wind speed is a scalar
+; ... Wind direction is circular quantity: [0..360); including 0 but excluding 360 and above
+;     Think discontinuity at 360.
+; ... Function 'wind_stats' uses Yamartino'a single-pass method. Yamartino's algorithm is 
+;     an approximation within 2% of the theoretical distribution.
+; ----
+; The standard deviation of wind direction is a measure of lateral turbulence, 
+; and can be used to estimate the Pasquill stability. 
+; ----
+; References:
+; Yamartino (1984): Journal of Climate and Applied Meteorology , 23, 1362-1366 
+; http://dx.doi.org/10.1175/1520-0450(1984)023<1362:ACOSPE>2.0.CO;2
+;
+; Turner, D.B. (1986): Comparison of Three Methods ...
+; http://journals.ametsoc.org/doi/pdf/10.1175/1520-0450%281986%29025%3C0703%3ACOTMFC%3E2.0.CO%3B2
+
+; Weber, R. (1997): Estimators for the Standard Deviation of Horizontal Wind Direction
+; http://journals.ametsoc.org/doi/pdf/10.1175/1520-0450%281997%29036%3C1403%3AEFTSDO%3E2.0.CO%3B2
+;
+; Wikipedia;
+; https://en.wikipedia.org/wiki/Yamartino_method
+;
+local wspd_avg, wspd_std, wdir_avg, wdir_std \
+    ,  d2r, wrad, wsin, wcos, e, wsrd, uv
+begin
+
+; wind speed average and standard deviation + meta data
+
+  wspd_avg = dim_avg_n_Wrap   (wspd, nDim) 
+  wspd_std = dim_stddev_n_Wrap(wspd, nDim) 
+
+  if (isatt(wspd,"long_name")) then                       ; add meta
+      wspd_avg@long_name = "average: "+wspd@long_name
+      wspd_avg@info_wspd = "average of wind speeds"
+      wspd_std@long_name = "std dev: "+wspd@long_name
+      wspd_std@info_wdir = "average of wind speeds"
+  else
+      wspd_avg@long_name = "average wind speed"
+      wspd_std@long_name = "standard deviation of wind speed"
+  end if
+
+; wind direction: intermediate quantities (see Ymartino)
+
+  d2r  = get_d2r(wdir)
+  wrad = wdir*d2r
+  wsin = dim_avg_n(sin(wrad), nDim)                ; avg sin(wdir) 
+  wcos = dim_avg_n(cos(wrad), nDim)                ;     cos
+  delete(wrad)                                     ; no longer needed
+
+;;mean wind direction: Turner method p707 based on Yamartino
+
+;;wdir_avg = atan2(wsin,wcos)*get_r2d(wspd)        ; average; Yamartino
+;;if (wdir_avg.lt.0) then
+;;    wdir_avg = wdir_avg + 360
+;;end if
+;;wdir_avg@long_name = "wind direction: mean"
+;;wdir_avg@info      = "Yamartino single-pass method"
+
+; mean wind via:  http://www.ndbc.noaa.gov/wndav.shtml
+; (a) compute mean U (avgU) and mean V (avgV)
+; (b) compute mean wind speed via mean components (a)
+; (c) compute mean wind direction via mean components (a)
+
+  uv   = wind_component(wspd, wdir, 1)             ; return list
+                                                   ; explicitly extract: clarity
+  u    = uv[0]                                     ; extract u
+  v    = uv[1]                                     ;         v
+  delete(uv)                                       ; no longer needed
+
+  avgU = dim_avg_n(u, 0)                           ; average u
+  avgV = dim_avg_n(v, 0)                           ;         v
+  avgW = sqrt(avgU^2 + avgV^2)                     ; NOAA
+  dirW = wind_direction(avgU, avgV, 0)             ; 'exact'
+
+; std dev of wind direction (~ within 2% ) ... Yamartino (1984)
+  
+  e    = sqrt(1-(wsin*wsin+wcos*wcos))
+  wdir_std = get_r2d(e)*asin(e)*(1+0.1547*e^3)
+  delete(e)                                        ; no longer needed
+
+  wdir_std@long_name = "wind direction: standard deviation"
+  wdir_std@info      = "Yamartino single-pass method"
+  copy_VarCoords(wspd_avg, wdir_std)
+
+  return ([/wspd_avg, wspd_std,     dirW, wdir_std, avgU, avgV/])  
 end
 ;====================
 undef("advect_variable_cfd")
