@@ -2472,7 +2472,7 @@ begin
 
   return([/prain, psnow /])  ; return as list
 end
-;=====================================================================
+;==========================================================
 undef("mwbm_driver")
 function mwbm_driver(prc:numeric, tmp:numeric, pet:numeric, snow:numeric \
                     ,lsmask:numeric,  opt:logical)
@@ -2481,7 +2481,7 @@ function mwbm_driver(prc:numeric, tmp:numeric, pet:numeric, snow:numeric \
 ;
 ; REFERENCE:
 ; A Monthly Water-Balance Model Driven By a Graphical User Interface
-; https://pubs.usgs.gov/of/2007/1088/pdf/of07-1088_508.pdf
+;       https://pubs.usgs.gov/of/2007/1088/pdf/of07-1088_508.pdf
 ; tmp: degC ; train=3.3C; tsnow=-10C are typical values
 ;
 ; This function allows the user to input PET derived from NCL's suite of
@@ -2489,11 +2489,17 @@ function mwbm_driver(prc:numeric, tmp:numeric, pet:numeric, snow:numeric \
 ; ' 
 ; Nomenclature:
 ; prc   - total monthly precipitation [rain and snow]: mm
+;         dimensionality: (time) or (time,npts) pr (time,lat,lon)
 ; tmp   - mean monthly temperature: degC 
+;         same dimensions as 'prc'
 ; pet   - monthly estimate of potential evaotranspirarion [mm]
+;         same dimensions as 'prc'
 ; snow  - total monthly snow (melted):  mm
-; lsmask- land (1) -sea (0) mask: no computations for sea locations 
-;       - If lsmask=-1 all locations will have the water balance computed
+;         same dimensions as 'prc'
+; lsmask- land (1) -sea (0) mask: no computations for sea (0) locations 
+;       - Actually *any* data mask array
+;       - If lsmask is set to the *scalar value* -1,
+;         all locations will have the water balance computed
 ;
 local rank_prc, rank_tmp, rank_pet, rank_sno, dim_prc, dim_tmp, dim_pet, dim_sno      \
     , type_prc, type_tmp, type_pet, type_sno, type_data, type_fill, dim_data \
@@ -2636,65 +2642,66 @@ begin
 
   snstor          = new( dim_data, type_data, type_fill)
   snstor          = 0.0
-  snstor@long_name= "Snow Storage"
-  snstor@units    = "mm"
+;;snstor@long_name= "Snow Storage"
+;;snstor@units    = "mm"
 
   smelt           = new( dim_data, type_data, type_fill)
   smelt           = 0.0
-  smelt@long_name = "Snow Melt"    ; per month
-  smelt@units     = "mm"
+;;smelt@long_name = "Snow Melt"    ; per month
+;;smelt@units     = "mm"
 
   smeltf          = new( dim_data, type_data, type_fill)
   smeltf          = 0.0
-  smeltf@long_name = "Snow Melt Fraction"
-  smeltf@units     = "mm"
+;;smeltf@long_name = "Snow Melt Fraction"
+;;smeltf@units     = "mm"
 
   sms             = new( dim_data, type_data, type_fill)   ; stor
-  sms@long_name   = "Soil Moisture Storage"
-  sms@units       = "mm"   
+  sms             = 0.0
+;;sms@long_name   = "Soil Moisture Storage"
+;;sms@units       = "mm"   
 
   aet             = new( dim_data, type_data, type_fill)
   aet             = 0.0
-  aet@long_name   = "Actual Evapotranspiration"
-  aet@units       = "mm"
+;;aet@long_name   = "Actual Evapotranspiration"
+;;aet@units       = "mm"
 
   runoff          = new( dim_data, type_data, type_fill)
   runoff          = 0.0
-  runoff@long_name= "Runoff"
-  runoff@units    = "mm"
+;;runoff@long_name= "Runoff"
+;;runoff@units    = "mm"
 
   rodirect        = new( dim_data, type_data, type_fill)
   rodirect        = 0.0
-  rodirect@long_name = "Direct Runoff"
-  rodirect@units  = "mm"
-  rodirect@info   = "Runoff from Impervious Surfaces or Infiltration-Excess Overflow"
+;;rodirect@long_name = "Direct Runoff"
+;;rodirect@units  = "mm"
+;;rodirect@info   = "Runoff from Impervious Surfaces or Infiltration-Excess Overflow"
 
   deficit         = new( dim_data, type_data, type_fill)
   deficit         = 0.0
-  deficit@long_name = "Deficit"
-  deficit@units   = "mm"
+;;deficit@long_name = "Deficit"
+;;deficit@units   = "mm"
 
   surplus         = new( dim_data, type_data, type_fill)
   surplus         = 0.0
-  surplus@long_name = "Surplus"
-  surplus@units   = "mm"
+;;surplus@long_name = "Surplus"
+;;surplus@units   = "mm"
 
   prain           = new( dim_data, type_data, type_fill)
   prain           = 0.0
-  prain@long_name = "Rain Component"
-  prain@units     = "mm"
+;;prain@long_name = "Rain Component"
+;;prain@units     = "mm"
 
   pmpe            = new( dim_data, type_data, type_fill)
   pmpe            = 0.0
-  pmpe@long_name  = "PMPE: prc-pet"
-  pmpe@units      = "mm"
+;;pmpe@long_name  = "PMPE: prc-pet"
+;;pmpe@units      = "mm"
 
   prestor         = PRESTOR          ; Use same variable names as source
   directfac       = DROFRAC 
   runoffFactor    = RUNOFF_FACTOR
 
 ;========================================================
-; Loop over each time step
+; Brute Force: Loop over each time step
 ;========================================================
    
   ntim = dim_data(0)
@@ -2901,7 +2908,7 @@ begin
              end if
              prain(nt,nl,ml)   = prain(nt,nl,ml) + smelt(nt,nl,ml)
              pmpe(nt,nl,ml)    = prain(nt,nl,ml) - pet(nt,nl,ml)    ; net water
-;print("nt="+nt+"  nl="+nl+"  ml="+ml+"  "+pmpe(nt,nl,ml)+"  "+prain(nt,nl,ml)+"  "+pet(nt,nl,ml))
+
              if (pmpe(nt,nl,ml).lt.0) then
                  sms(nt,nl,ml) =  prestor(nl,ml) - abs((pmpe(nt,nl,ml)*prestor(nl,ml))/WHC)
                  if (sms(nt,nl,ml).lt.0)  then
@@ -2937,6 +2944,59 @@ begin
   end if          ; rank_data
 
   deficit = where(deficit.lt.0, 0, deficit)    ; rounding
+
+;---Apply Mask ... some variables [eg: 'sms'] are initialized to 0
+
+;---Attach meta data
+
+  snstor@long_name  = "Snow Storage"
+  snstor@units      = "mm"
+  smelt@long_name   = "Snow Melt"    ; per month
+  smelt@units       = "mm"
+  smeltf@long_name  = "Snow Melt Fraction"
+  smeltf@units      = "mm"
+  sms@long_name     = "Soil Moisture Storage"
+  sms@units         = "mm"
+  aet@long_name     = "Actual Evapotranspiration"
+  aet@units         = "mm"
+  runoff@long_name  = "Runoff"
+  runoff@units      = "mm"
+  rodirect@long_name= "Direct Runoff"
+  rodirect@units    = "mm"
+  rodirect@info     = "Runoff from Impervious Surfaces or Infiltration-Excess Overflow"
+  deficit@long_name = "Deficit"
+  deficit@units     = "mm"
+  surplus@long_name = "Surplus"
+  surplus@units     = "mm"
+  prain@long_name   = "Rain Component"
+  prain@units       = "mm"
+  pmpe@long_name    = "PMPE: prc-pet"
+  pmpe@units        = "mm"
+
+
+  copy_VarCoords(prc,pmpe)
+  copy_VarCoords(prc, sms)
+  copy_VarCoords(prc, aet)
+  copy_VarCoords(prc,deficit)
+  copy_VarCoords(prc,surplus)
+  copy_VarCoords(prc,runoff)
+  copy_VarCoords(prc,rodirect)
+  copy_VarCoords(prc,smelt)
+  copy_VarCoords(prc,prain)
+
+  if (any(lsm.ne.1)) then  ;change unchanged initial values to _FillValue
+      snstor  = where(snstor.eq.0 , snstor@_FillValue , snstor )
+      smelt   = where(smelt .eq.0 , smelt@_FillValue  , smelt  )
+      smeltf  = where(smeltf.eq.0 , smeltf@_FillValue , smeltf )
+      sms     = where(sms.eq.0    , sms@_FillValue    , sms    )
+      aet     = where(aet.eq.0    , aet@_FillValue    , aet    )
+      runoff  = where(runoff .eq.0, runoff@_FillValue , runoff )
+      deficit = where(deficit.eq.0, deficit@_FillValue, deficit)
+      surplus = where(surplus.eq.0, surplus@_FillValue, surplus)
+      prain   = where(prain.eq.0  , prain@_FillValue  , prain  )
+      pmpe    = where(pmpe .eq.0  , pmpe@_FillValue   , pmpe   )
+      prestor = where(prestor.eq.0, prestor@_FillValue, prestor)
+  end if
 
   return ([/pmpe, sms, aet, deficit, snstor, surplus, runoff, rodirect, smelt, prain /] )
 end
