@@ -22035,3 +22035,288 @@ begin
   copy_VarCoords(vm, cdp)
   return(cdp)
 end
+;=============================================================================
+undef("rgrid2geocircle")
+function rgrid2geocircle(x:numeric, clat[*]:numeric, clon[*]:numeric, radius[*]:numeric \
+                        ,N[1]:integer, opt[1]:logical)
+;
+; Interpolate a RECTILINEAR grid to geolocation_circle(s)
+; Facilitate azimuthal calculations
+;
+; A conceptual sketch ...; A pic:
+; https://cs.stackexchange.com/questions/43744/fast-algorithm-for-interpolating-data-from-polar-coordinates-to-cartesian-coordi
+; This is a 'polar' (not cylindrical)  view (z=constant;  p=isobaric_level)
+;
+;
+; Nomenclature
+; x:           Source RECTILINEAR grid: (lat,lon),  (time,lat,lon),  (time,lev,lat,lon)
+;              MUST have coordinate variables associated with each dimension
+; clat, clon:  Center latitudes(s) / longitude(s); degrees_north , degrees_east
+; radius:      One or more radii (degrees). These should be in ascending numerical order.
+; N            Number of points for each circle    
+; opt:         Option. Currently, not used. Set to False
+;
+; Return
+;
+local dimx, rankx, ntim, nlev, nlat, mlon, nctr, nrad, rad_unit, plat, plon, drad
+begin
+  dimx  = dimsizes(x)
+  rankx = dimsizes(dimx)
+  if (rankx.lt.2 .or. rankx.gt.4) then
+      print("rgrid2geocircle: Only ranks 2, 3, 4 are allowed: rankx="+rankx)
+      exit
+  end if
+
+  nctr = dimsizes(clat)
+  nrad = dimsizes(radius)
+
+  dnam = getvardimnames(x)
+  ntim = dimx(0)
+
+  if (rankx.eq.3) then
+      nlev = 0
+      nlat = dimx(1)
+      mlon = dimx(2)
+      lat  = x&$dnam(1)$
+      lon  = x&$dnam(2)$
+  elseif (rankx.eq.4) then
+      nlev = dimx(1)
+      nlat = dimx(2)
+      mlon = dimx(3)
+      plev = x&$dnam(1)$
+      lat  = x&$dnam(2)$
+      lon  = x&$dnam(3)$
+  else
+      nlev = 0
+      ntim = 1                 ; force a dimension size
+      nlat = dimx(0)
+      mlon = dimx(1)
+      lat  = x&$dnam(0)$
+      lon  = x&$dnam(1)$
+  end if
+ 
+;---Calculate the lat/lon locations of each circle at each radius
+
+   rad_unit  = 0  ; degrees
+   circle    = geolocation_circle(clat, clon, radius, rad_unit, N, False) ; circle is type list
+   plat = circle[0]                   ; clarity: explicitly extract list variables
+   plon = circle[1]
+ 
+;---Use bilinear interpolation: Create arrays to save results 
+
+   if (rankx.eq.4) then
+       drad = new((/ntim,nctr,nlev,nrad,N/),typeof(x),getVarFillValue(x))
+   else
+       drad = new((/ntim,nctr,nrad,N/),typeof(x),getVarFillValue(x))
+   end if
+   
+;---Loop over time, center & radius
+;---At each iteration use some builtin functions to interpolate. Could be slow!
+ 
+   do nc=0,nctr-1
+     do nr=0,nrad-1
+        if (rankx.eq.4) then
+            drad(:,nc,:,nr,:) = linint2_points(lon, lat, x, False, plon(nc,nr,:),plat(nc,nr,:), 0)
+        else
+            drad(:,nc,nr,:)   = linint2_points(lon, lat, x, False, plon(nc,nr,:),plat(nc,nr,:), 0)
+        end if
+     end do                    ; nr
+   end do                      ; nc
+
+   if (rankx.eq.4) then
+       copy_VarCoords(x(:,:,0,0),drad(:,0,:,0,0))
+       drad!1 = "central_location"
+       drad!3 = "radius"
+       drad!4 = "pts"
+   else
+       copy_VarCoords(x(:,:,0,0),drad(:,0,0,0))
+       drad!1 = "center_location"
+       drad!2 = "radius"
+       drad!3 = "pts"
+   end if
+   drad&radius = radius
+
+  if (rankx.ge.3) then
+      drad!0 = dnam(0)
+      drad&$dnam(0)$ = x&$dnam(0)$
+  end if
+
+  if (rankx.le.3) then
+      drad!1 = "center"
+      drad!2 = "radius"
+      drad!3 = "circle"
+      drad&radius = radius
+
+      copy_VarCoords(drad(0,:,:,:), plat)
+      copy_VarCoords(drad(0,:,:,:), plon)
+  elseif (rankx.eq.4) then
+      drad!1 = "center"
+      drad!2 = dnam(1)
+      drad!3 = "radius"
+      drad!4 = "circle"
+      drad&$dnam(1)$ = plev
+      drad&radius    = radius
+      printVarSummary(drad)
+      printVarSummary(plat)
+
+      copy_VarCoords(drad(0,:,0,:,:), plat)
+      copy_VarCoords(drad(0,:,0,:,:), plon)
+  end if
+  if (isatt(x,"long_name")) then
+      drad@long_name = x@long_name
+  else
+      drad@long_name = "Rectilinear to Geo-Circle"
+  end if
+  if (isatt(x,"units")) then
+      drad@units = x@units
+  end if
+  drad@center_lat= clat
+  drad@center_lon= clon
+  drad@NCL_tag = "rgrid2geocircle"
+
+  plat@long_name = "Latitude: Geo-Circle grid"
+  plon@long_name = "Longitude: Geo-Circle grid"
+  plat@units     = "degrees_north"
+  plon@units     = "degrees_east"
+
+  if (rankx.ge.3) then
+      return([/drad, plat, plon/])
+  else
+      return([/drad(0,:,:,:,:), plat(0,:,:,:), plon(0,:,:,:)/])  ; eliminate faux 'time' dimension
+  end if
+end  
+;=========================
+undef("rcm2geocircle")
+function rcm2geocircle(x:numeric, lat2d[*][*]:numeric, lon2d[*][*]:numeric \
+                      ,clat[*]:numeric, clon[*]:numeric,radius[*]:numeric  \
+                      ,N[1]:integer, opt[1]:logical)
+;
+; Interpolate a CURVILINEAR grid to a geolocation circle(s)
+; Facilitate azimuthal calculations
+;
+; A conceptual sketch ...; A pic:
+; https://cs.stackexchange.com/questions/43744/fast-algorithm-for-interpolating-data-from-polar-coordinates-to-cartesian-coordi
+; This is a 'polar' (not cylindrical)  view (z=constant;  p=isobaric_level)
+;
+; This could be slow. If, possible input a subset of the source that includes
+; the area of interest.
+;
+local dimx, rankx, ntim, nlev, nlat, mlon, nctr, nrad, plat, plon, drad
+;
+; Nomenclature
+; x:           Source rectininear grid: (time,lat,lon),  (time,lev,lat,lon)
+; lat2d,lon2d  Curvilinear grids
+; clat, clon:  Center latitudes(s) / longitude(s); degrees_north , degrees_east
+; radius:      One or more radii (degrees). These should be in ascending numerical order. 
+; N            Number of pts at each circle
+; opt:         Option. Currently, not used. Set to False
+;
+; Return
+begin
+  dimx = dimsizes(x)
+  rankx= dimsizes(dimx)
+  if (rankx.lt.2 .or. rankx.gt.4) then
+      print("rcm2geocircle: Only ranks 2,3,4 are allowed: rankx="+rankx)
+      exit
+  end if
+
+  nctr = dimsizes(clat)
+  nrad = dimsizes(radius)
+
+  dnam = getvardimnames(x)
+  ntim = dimx(0)
+
+  if (rankx.eq.3) then
+      nlev = 0
+      nlat = dimx(1)
+      mlon = dimx(2)
+  elseif (rankx.eq.4) then
+      nlev = dimx(1)
+      nlat = dimx(2)
+      mlon = dimx(3)
+      plev = x&$dnam(1)$
+  else
+      ntim = 1                 ; temporarily force a dimension size
+      nlev = 0
+      nlat = dimx(0)
+      mlon = dimx(1)
+  end if
+ 
+;---Calculate the lat/lon locations of each circle at each radius
+
+  rad_unit = 0  ; degrees
+  circle   = geolocation_circle(clat, clon, radius, rad_unit, N, False) ; circle is type list
+  plat = circle[0]                   ; clarity: explicitly extract list variables
+  plon = circle[1]
+printVarSummary(plat)
+ 
+  if (rankx.eq.3) then
+      drad = new( (/ntim,nctr,     nrad,N/), "float")   ; x=>3D
+  else
+      drad = new( (/ntim,nctr,nlev,nrad,N/), "float")   ; x=>4D
+  end if
+printVarSummary(drad)
+   
+;---Loop over time & radius
+;---At each iteration use some builtin functions to interpolate. Could be slow!
+ 
+  do nc=0,nctr-1
+    do nr=0,nrad-1
+       nggcog(clat(nc), clon(nc), radius(nr), plat(nc,nr,:), plon(nc,nr,:))
+       if (rankx.eq.4) then
+           drad(:,nc,:,nr,:) = rcm2points(lat2d,lon2d,x,plat(nc,nr,:), plon(nc,nr,:),0) ;  4D curvilinear
+       else
+           drad(nt,nc,nr,:)  = rcm2points(lat2d,lon2d,x,plat(nc,nr,:), plon(nc,nr,:),0) ;  3D curvilinear
+       end if
+    end do                  ; nr
+  end do                    ; nc
+
+  if (rankx.ge.3) then
+      drad!0 = dnam(0)
+      drad&$dnam(0)$ = x&$dnam(0)$
+  end if
+
+  if (rankx.le.3) then
+      drad!1 = "center"
+      drad!2 = "radius"
+      drad!3 = "pts"
+      drad&radius = radius
+
+      copy_VarCoords(drad(0,:,:,:), plat)
+      copy_VarCoords(drad(0,:,:,:), plon)
+  elseif (rankx.eq.4) then
+      drad!1 = "center"
+      drad!2 = dnam(1)
+      drad!3 = "radius"
+      drad!4 = "pts"
+      drad&$dnam(1)$ = plev
+      drad&radius    = radius
+
+      copy_VarCoords(drad(0,:,0,:,:), plat)
+      copy_VarCoords(drad(0,:,0,:,:), plon)
+  end if
+  if (isatt(x,"long_name")) then
+      drad@long_name = x@long_name
+  else
+      drad@long_name = "Curvilinear to Geo-Circle"
+  end if
+  if (isatt(x,"units")) then
+      drad@units = x@units
+  end if
+  drad@center_lat = clat
+  drad@center_lon = clon
+  drad@NCL_tag    = "rcm2geocircle"
+
+  plat@long_name = "Latitude: Geo-Circle"
+  plon@long_name = "Longitude: Geo-Circle"
+  plat@units     = "degrees_north"
+  plon@units     = "degrees_east"
+
+; Return a variable of type 'list':  
+
+  if (rankx.ge.3) then
+      return([/drad, plat, plon/])
+  else
+      return([/drad(0,:,:,:,:), plat(0,:,:,:), plon(0,:,:,:)/])  ; eliminate faux 'time' dimension
+  end if
+end  
