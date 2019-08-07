@@ -22320,3 +22320,73 @@ printVarSummary(drad)
       return([/drad(0,:,:,:,:), plat(0,:,:,:), plon(0,:,:,:)/])  ; eliminate faux 'time' dimension
   end if
 end  
+;================================
+undef("beta_hybrid_ccm")
+function beta_hybrid_ccm(pm[*][*][*][*]:numeric, pi[*][*][*][*]:numeric, psfc[*][*][*]:numeric, ptop[1]:numeric)
+;
+; BETA factors for CAM hybrid :  "m" and "i" letters refer to mid/interface-level values 
+; REFERENCES:
+;             Boer (1982) 
+;                  Diagnostic Equations in Isobaric Coordinates
+;                  Mon.Wea.Rev. 110, pp. 1801-20.   
+;
+;             Trenberth (1991)
+;                  Climate diagnostics from global analyses: conservation of mass in ECMWF analyses
+;                  J. Climate, 4, pp 707-722
+;
+; pm   - mid-level pressures (time,ilev,lat,lon)     ; increasing downward (top-to-bottom)
+; pi   - interface-level pressures (time,lev,lat,lon); increasing downward (top-to-bottom)
+; psfc - sfc pressure        (time,    lat,lon)
+; pressure units: Pa or hPa .... all must agree
+; 
+; History:
+; Dennis Shea [7/2019] original version used mid-level pressures only  
+; Hui Ding [8/2019] modified (improved) the original version to use interface pressures 
+;
+; Documentation and Example:   NCL 6.X.Y
+;      http://www.ncl.ucar.edu/Document/Functions/Contributed/beta_hybrid_ccm.shtml
+; 
+local dimpi, beta, PSFC, beta, kl, ntim, klevi, klevm, nlat, mlon, one, zero
+begin
+  dimpi = dimsizes(pi)  
+  ntim  = dimpi(0)
+  klevi = dimpi(1)
+  nlat  = dimpi(2)
+  mlon  = dimpi(3)
+
+  klevm = klevi-1                        ; mid-level is one less than interface levels
+
+  one   = totype(1, typeof(psfc)) 
+  zero  = totype(0, typeof(psfc)) 
+ 
+  PSFC  = conform(pm, psfc, (/0,2,3/))   ; for array operations
+
+; If pm is outside the specified range, do not consider it except for the following special cases  
+
+  beta  = where(pm.ge.ptop .and. pm.le.PSFC, one, zero)   ; array for efficiency
+  delete(PSFC)
+     
+  do kl=0,klevi-2
+     beta(:,kl,:,:) = where(pi(:,kl,:,:).lt.ptop .and. pi(:,kl+1,:,:).ge.ptop \
+                           ,(pi(:,kl+1,:,:)-ptop)/(pi(:,kl+1,:,:)-pi(:,kl,:,:)) \
+                           , beta(:,kl,:,:))
+  end do
+
+  do kl=0,klevi-2
+     beta(:,kl,:,:) = where(pi(:,kl,:,:).lt.psfc .and. pi(:,kl+1,:,:).ge.psfc  \
+                           ,(psfc-pi(:,kl,:,:))/(pi(:,kl+1,:,:)-pi(:,kl,:,:)) \
+                           , beta(:,kl,:,:))
+  end do
+
+  copy_VarCoords(pm, beta)
+
+  beta@_FillValue= totype(-999, typeof(beta))
+  beta           = where(beta.eq.zero, beta@_FillValue, beta)
+  beta@long_name = "beta factor" 
+  beta@reference1= "Trenberth (1991),Climate diagnostics from global analyses: conservation of mass in ECMWF analyses, J. Climate, 4, pp 707-722"
+  beta@reference2= "Boer (1982, Diagnostic Equations in Isobaric Coordinates, Mon.Wea.Rev. 110, pp. 1801-20"
+  beta@NCL_tag   = "beta_hybrid_ccm"
+
+  return(beta)
+end
+
