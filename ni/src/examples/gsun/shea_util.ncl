@@ -4169,11 +4169,11 @@ function pie_chart(wks:graphic, percent[*]:numeric, name[*]:string        \
      xx(npts2-1)   = xOrig
      yy(npts2-1)   = yOrig
 
-     pgRes@gsFillColor   =  colors(n,:)          ; fill with associated color
+     pgRes@gsFillColor   =  rgba_colors(n,:)          ; fill with associated color
      plotPC@$unique_string("dum")$ = gsn_add_polygon (wks, plotPC, xx, yy, pgRes)  ; color fill
      plotPC@$unique_string("dum")$ = gsn_add_polyline(wks, plotPC, xx, yy, plRes)  ; outline
 
-     gsRes@gsMarkerColor = colors(n,:)           ; associate marker
+     gsRes@gsMarkerColor = rgba_colors(n,:)           ; associate marker
      if (percent(n).lt.10) then
          text = sprintf("%5.1f", percent(n))+"  "+name(n)  ; include %
      else
