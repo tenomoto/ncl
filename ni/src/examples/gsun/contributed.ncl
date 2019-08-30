@@ -22389,4 +22389,758 @@ begin
 
   return(beta)
 end
+;==============================================================
+;           OCEAN:    References and Code Sources
+;==============================================================
+; UNESCO 1983, N.P. Fofonoff and R.C. Millard Jr. 
+; Algorithms for computation of fundamental properties of seawater
+; Unesco technical papers in marine science, 44.
+; https://www.oceanbestpractices.net/bitstream/handle/11329/109/059832eb.pdf?sequence=1&isAllowed=y
+; The above has values that can be used for verification.
+;==============================================================
+; WHP Operations and Methods { July 1991 } 
+; Calculation of Physical Properties of Seawater 
+; https://geo.h2o.ucsd.edu/documentation/manuals/pdf/91_1/algo6.pdf
+;==============================================================
+; What every oceanographer needs to know about TEOS-10: (The TEOS-10 Primer)
+; R. Pawlowicz (2013)
+; http://www.teos-10.org/pubs/TEOS-10_Primer.pdf
+;==============================================================
+; McDougall, T.J. and P.M. Barker, 2011: 
+; Getting started with TEOS-10 and the Gibbs Seawater (GSW) Oceanographic Toolbox, 28pp.
+; SCOR/IAPSO WG127, ISBN 978-0-646-55621-5 
+;==============================================================
+; https://www.mbari.org/products/research-software/matlab-scripts-oceanographic-calculations/
+;==============================================================
+;
+undef("gravity_ocn")
+function gravity_ocn(p:numeric, lat:numeric)
+;
+; WHP: Eqn 30
+;
+; p   - pressure [dbar]
+; lat - degrees of latitude
+;
+local w, gr
+begin
+  w    = sin(lat*0.01745329)^2
+  gr   = 9.7803185 * (1.0 + (5.278895e-3 + 2.3462e-5*w)*w) + 1.092e-6*p
+
+  copy_VarCoords(p,gr)
+  gr@long_name = "gravity"
+  gr@units     = "m/s"
+  gr@info      = "WHP Operations and Methods: 1991: Eqn 30"
+  gr@NCL_tag   = "gravity_ocn"
+  return(gr)
+end
+;==============================================================
+undef("depth_ocn")
+function depth_ocn(p:numeric, lat:numeric, Del:numeric)
+;
+; UNESCO 1983
+;
+; p   - pressure [dbar]
+; lat - degrees of latitude
+; Del - geopotential anomaly [correction factor]
+;       set to 0.0 if unknown or do not want used
+;
+local gr, DepthTerm, depth
+begin
+  gr        = gravity_ocn(p, lat)
+  DepthTerm = (((-1.82e-15*p + 2.279e-10)*p - 2.2512e-5)*p + 9.72659)*p
+  depth     = DepthTerm/gr + Del/9.8
+
+  copy_VarCoords(p,depth)
+  if (Del.eq.0) then
+      depth@long_name = "depth"
+  else
+      depth@long_name = "depth [with correction term]"
+  end if
+  depth@units     = "m"
+  depth@info      = "UNESCO: 1983"
+  depth@NCL_tag   = "depth_ocn"
+  return(depth)
+end
+;===============================================================
+undef("salinity_un83_ocn")
+function salinity_un83_ocn(C:numeric, T:numeric, P:numeric)
+;
+;--- Direct translation
+;--- salinity.m                                       by:  Edward T Peltzer, MBARI
+;---                                                  revised:  2007 Apr 28.
+;---
+;--- SALINITY CALCULATION (pss) FROM CONDUCTIVITY.
+;---
+;--- Reference: Fofonff, P. and Millard, R.C. Jr.  Unesco 1983.
+;---    Algorithms for computation of fundamental properties of seawater.
+;---    Unesco Tech. Pap. in Mar. Sci., No. 44, 53 pp.
+;---
+;--- Input:    	C   - in situ conductivity  (S/m)
+;---            T   - temperature in degree C
+;---            P   - pressure in dbars  (not SI)
+;---            C15 - conductivity at 15 deg C
+;---                  MBARI default value = 4.2914
+;---
+;--- Internal Variables:
+;---
+;---		R   - ratio of in situ conductivity to standard conductivity
+;---		rt  - ratio of conductivity of standard sea water S=35,T=t to S=35,T=15
+;---		Rp  - ratio of in situ conductivity to same at P=0
+;---		Rt  - ratio of sample conductivity to standard conductivity at T=t
+;---
+;---		S   - salinity at T=15
+;---		dS  - delta correction for T not equal 15
+;---
+;--- Output:      
+;---              Salt = salinity(C,T,P).
+;---
+;--- NOTE:
+;--- The electrical conductivity of the standard seawater, which is 4.2914 S*m-1. 
+;--- For electrical conductivities measured in mS*cm-1 the value needs to be shifted 
+;--- one decade to 42.914 mS*cm-1.
+;---
+;--- The Practical Salinity calculation is valid only in the 
+;--- range 2< S P <42 and - 2°C < temperature < 35°C (Feistel, 2008)
+;---
+local C15, a0,a1,a2,a3,a4,a5,b0,b1,b2,b3,b4,b5  \ 
+         , d1,d2,d3,d4,e1,e2,e3, R,rt,Rp,Rt
+         , sqrt_Rt, Salt, ds
+begin
+
+  if (.not.(isconform(C,T) .and. isconform(C,P))) then
+      print("salinity_un83_ocn: input variables do not conform")
+      exit
+  end if
+
+; DEFINE CONSTANTS, ETC FOR CALCULATION
+
+  C15= 4.2914
+
+  a0 =  0.008
+  a1 = -0.1692
+  a2 = 25.3851
+  a3 = 14.0941
+  a4 = -7.0261
+  a5 =  2.7081
+
+  b0 =  0.0005
+  b1 = -0.0056
+  b2 = -0.0066
+  b3 = -0.0375
+  b4 =  0.0636
+  b5 = -0.0144
+
+  c0 =  0.6766097
+  c1 =  2.00564e-2
+  c2 =  1.104259e-4
+  c3 = -6.9698e-7
+  c4 =  1.0031e-9
+
+  d1 =  3.426e-2
+  d2 =  4.464e-4
+  d3 =  4.215e-1
+  d4 = -3.107e-3
+
+;--- The e# coefficients reflect the use of pressure in dbar
+;--- rather that in Pascals (SI).
+
+  e1 =  2.07e-5
+  e2 = -6.37e-10
+  e3 =  3.989e-15
+
+  k  = 0.0162
+
+;--- Calculate internal variables
+
+  R  = C / C15
+  rt = c0+(c1+(c2+(c3+c4*T)*T)*T)*T
+  Rp = 1.0 + (e1+(e2+e3*P)*P)*P / (1.0 + (d1+d2*T)*T + (d3+d4*T)*R)
+  Rt = R / Rp / rt
+  sqrt_Rt = sqrt(Rt)
+
+;--- Calculate salinity
+
+  Salt = a0 + (a1+(a3+a5*Rt)*Rt)*sqrt_Rt + (a2+a4*Rt)*Rt
+
+  dS   = b0 + (b1+(b3+b5*Rt)*Rt)*sqrt_Rt + (b2+b4*Rt)*Rt
+  dS   = dS * (T-15) / (1+k*(T-15))
+
+  Salt = Salt + dS
+
+  Salt@long_name = "Salinity"
+  Salt@units     = "pss"
+  Salt@info      = "UNESCO: 1983"
+  Salt@NCL_tag   = "salinity_un83_ocn"
+  copy_VarCoords(T,Salt)
+
+  return(Salt)
+end
+;-------------------------------------------------------------------
+undef("atg_ocn")
+function atg_ocn(S:numeric, T:numeric, P:numeric)
+;
+;--- Direct translation of Matlab code created by Edward T Peltzer, MBARI
+;---
+;--- function ATG=Adiabat(S,T,P)
+;---
+; Adiabat Computes the adiabatic temperature gradient (called by potentmp_ocn.m).
+;
+;       Adiabat(S,T,P) returns the gradient. Units are:
+;   
+;       PRESSURE        P        DECIBARS
+;       TEMPERATURE     T        DEG CELSIUS (IPTS-68)
+;       SALINITY        S        (IPSS-78)
+;       ADIABATIC       ATG      DEG. C/DECIBAR
+;
+; REF: BRYDEN,H.,1973,DEEP-SEA RES.,20,401-408
+
+; Notes: RP 29/Nov/91
+;
+; I have modified the FORTRAN code to make it Matlab compatible, but
+; no numbers have been changed. In certain places "*" has been replaced
+; with ".*" to allow vectorization.
+;
+; This routine is called by potentmp.m, and is called ATG in the
+; UNESCO algorithms.
+
+;C CHECKVALUE: ATG=3.255976E-4 C/DBAR FOR S=40 (IPSS-78),
+;C T=40 DEG C,P0=10000 DECIBARS
+;
+local DS, ATG
+begin
+
+  DS  = S - 35.0 
+  ATG = (((-2.1687E-16*T+1.8676E-14)*T-4.6206E-13)*P+ \
+((2.7759E-12*T-1.1351E-10)*DS+((-5.4481E-14*T+8.733E-12)*T-6.7795E-10)*T+ \
+1.8741E-8))*P+(-4.2393E-8*T+1.8932E-6)*DS+((6.6228E-10*T-6.836E-8)*T+ \
+8.5258E-6)*T+3.5803E-5;
+
+  ATG@long_name = "adiabatic temperature gradient"
+  ATG@units     = "degC/dbar"
+  ATG@info      = "UNESCO: 1983 ; IPSS-78"
+  ATG@NCL_tag   = "atg_ocn"
+  copy_VarCoords(T, ATG)
+
+  return(ATG)
+end
+;----------------------------------------------------------------------
+undef("potentmp_ocn")
+function potentmp_ocn(S:numeric, T0:numeric, P0:numeric, PR:numeric)
+;
+;--- Direct translation of Matlab code created by Edward T Peltzer, MBARI
+;
+;function THETA=Potentmp(S,T0,P0,PR)
+; Potentmp Potential temperature from in-situ measurements.
+;          THETA=Potentmp(S,TO,PO,PR) computes the potential temp.
+;          at a reference pressure PR (dbars) corresponding to the 
+;          salinity S (ppt) and temperature TO (deg C) at pressure 
+;          PO (dbars). The formula has been copied from the UNESCO
+;          algorithms (See comments for details).
+;
+;          if PR is omitted, it is assumed to be zero.
+;          NCL will require PR be present.
+;
+;          S, T0, P0 can be vectors or matrices. If S (T) is a scalar,
+;          and T (S) is a vector or matrix, we assume that the scalar
+;          value corresponds to all values in the vector. 
+;  
+;          If P0 is a vector, and one of S,T0 is a matrix, we assume
+;          that elements of P0 correspond with all row entries in the
+;          matrices.
+;
+; REF: BRYDEN,H.,1973,DEEP-SEA RES.,20,401-408
+;      FOFONOFF,N.,1977,DEEP-SEA RES.,24,489-491
+;
+local P, T, H, XK, T, Q, P, THETA
+begin
+
+  if (.not.(isconform(S,T0) .and. isconform(S,P0) .and. isconform(S,PR)) ) then
+      print("potentmp_ocn: input variables do not conform")
+      exit
+  end if
+
+; Notes: RP 29/Nov/91
+; This routine calls Adiabat.m (renamed from ATG).
+
+;C ***********************************
+;C TO COMPUTE LOCAL POTENTIAL TEMPERATURE AT PR
+;C USING BRYDEN 1973 POLYNOMIAL FOR ADIABATIC LAPSE RATE
+;C AND RUNGE-KUTTA 4-TH ORDER INTEGRATION ALGORITHM.
+;C UNITS:      
+;C       PRESSURE        P0       DECIBARS
+;C       TEMPERATURE     T0       DEG CELSIUS (IPTS-68)
+;C       SALINITY        S        (IPSS-78)
+;C       REFERENCE PRS   PR       DECIBARS
+;C       POTENTIAL TMP.  THETA    DEG CELSIUS 
+;C CHECKVALUE: THETA= 36.89073 C,S=40 (IPSS-78),T0=40 DEG C,
+;C P0=10000 DECIBARS,PR=0 DECIBARS
+;C             
+;C      SET-UP INTERMEDIATE TEMPERATURE AND PRESSURE VARIABLES
+;
+      P  = P0
+      T  = T0
+;C**************
+      H  = PR - P 
+      XK = H*atg_ocn(S,T,P)  
+      T  = T + 0.5*XK 
+      Q  = XK   
+      P  = P + 0.5*H  
+      XK = H*atg_ocn(S,T,P)  
+      T  = T + 0.29289322*(XK-Q)  
+      Q  = 0.58578644*XK + 0.121320344*Q  
+      XK = H*atg_ocn(S,T,P)  
+      T  = T + 1.707106781*(XK-Q) 
+      Q  = 3.414213562*XK - 4.121320344*Q 
+      P  = P + 0.5*H  
+      XK = H*atg_ocn(S,T,P)  
+      THETA = T + (XK-2.0*Q)/6.0       
+
+; return meta data
+
+      THETA@long_name = "Potential Temperature"
+      THETA@units     = "degC"
+      THETA@NCL_tag   = "potentmp_ocn"
+      copy_VarCoords(T, THETA)
+
+      return(THETA)
+end
+;--------------------------------------------------------------------
+undef("pressure_ocn")
+function pressure_ocn(DPTH:numeric, XLAT:numeric) 
+;
+; function P80=Pressure(DPTH,XLAT)
+; Pressure Computes pressure given the depth at some latitude
+;          P=Pressure(D,LAT) gives the pressure P (dbars) at a depth D (m)
+;          at some latitude LAT (degrees).
+;
+;          This probably works best in mid-latitude oceans, if anywhere!
+;
+;          Ref: Saunders, "Practical Conversion of Pressure to Depth",
+;              J. Phys. Oceanog., April 1981.
+; 
+; Notes: RP (WHOI) 2/Dec/91
+;         I copied this directly from the UNESCO algorithms.
+;
+; CHECK VALUE: P80=7500.004 DBARS;FOR LAT=30 DEG., DEPTH=7321.45 METERS
+;
+local PI, PLAT, D, C1, P80
+begin
+  PI   = get_pi(XLAT)
+  PLAT = abs(XLAT*PI/180.) 
+  D    = sin(PLAT) 
+  C1   = 5.92E-3+(D*D)*5.25E-3 
+  P80  = ((1-C1)-sqrt(((1-C1)^2)-(8.84E-6*DPTH)))/4.42E-6 
+
+; return meta data
+
+  P80@long_name = "Pressure"
+  P80@units     = "dbar"
+  P80@caveat    = "This probably works best in mid-latitude oceans, if anywhere!"
+  P80@NCL_tag   = "potentmp_ocn"
+  copy_VarCoords(DPTH, P80)
+  return(P80)
+end
+;--------------------------------------------------------------------
+undef("vsnd_un95_ocn")
+function vsnd_un95_ocn(s:numeric, t:numeric, p:numeric)
+;
+; Translation: Matlab ==> NCL
+;
+; Vsnd_un95.m                                      by:  Edward T Peltzer, MBARI
+;                                                  revised:  2015 Apr 10.
+;
+; CALCULATE SPEED OF SOUND IN SEAWATER AS A FUNCTION OF S, T & P USING THE
+;   UNESCO 1995 EQUATION
+;
+; This is copied directly from the unesco algorithmms, with some minor changes
+;
+; Source: Wong and Zhu (1995) "Speed of sound in seawater as a function of salinity,
+;         temperature and pressure." J. Acoust. Soc. Am. 97: 1732-1736.
+;
+; Input:    s = Salinity (pss-78).
+;           t = Temperature (deg C).
+;           p = Pressure in decibars.
+;
+; Output:   Speed of sound in seawater (m/sec).
+;
+;           Vsnd = vsnd_un95_ocn(s,t,p)
+;
+; CHECKVALUES
+;
+;    for Vsnd UNESCO 1995: Vsnd=1732.0175 M/S  @  S=40, T=40 DEG C, P=10000 DBAR.
+;
+;
+local p_bar, sr, a_tp, b_tp, c_tp, d_tp, vsnd \
+    , a00,a01,a02,a03,a04,a10,a11,a12,a13,a14,a20,a21,a22,a23,a30,a31,a32 \
+    , b00,b01,b10,b11,c00,c01,c02,c03,c04,c05,c10,c11,c12,c13,c14,c20,c21 \
+    , c22,c23,c24,c30,c31,c32,d00,d01,a0,a1,a2,a3,c0,c1,c2,c3
+begin
+
+  if (.not.(isconform(s,t) .and. isconform(s,p))) then
+      print("vsnd_un95_ocn: input variables do not conform")
+      exit
+  end if
+
+; scale pressure to bars
+
+    p_bar=p/10. 
+      
+; calculate square-root of salinity
+
+    sr = sqrt(abs(s)) 
+      
+; define coefficients from wong & zhu (1995)
+
+    a00 =  1.389 
+    a01 = -1.262e-2 
+    a02 =  7.166e-5 
+    a03 =  2.008e-6 
+    a04 = -3.21e-8 
+    a10 =  9.4742e-5 
+    a11 = -1.2583e-5 
+    a12 = -6.4928e-8 
+    a13 =  1.0515e-8 
+    a14 = -2.0142e-10 
+    a20 = -3.9064e-7 
+    a21 =  9.1061e-9 
+    a22 = -1.6009e-10 
+    a23 =  7.994e-12 
+    a30 =  1.100e-10 
+    a31 =  6.651e-12 
+    a32 = -3.391e-13 
+    b00 = -1.922e-2 
+    b01 = -4.42e-5 
+    b10 =  7.3637e-5 
+    b11 =  1.7950e-7 
+    c00 =  1402.388 
+    c01 =  5.03830 
+    c02 = -5.81090e-2 
+    c03 =  3.3432e-4 
+    c04 = -1.47797e-6 
+    c05 =  3.1419e-9 
+    c10 =  0.153563 
+    c11 =  6.8999e-4 
+    c12 = -8.1829e-6 
+    c13 =  1.3632e-7 
+    c14 = -6.1260e-10 
+    c20 =  3.1260e-5 
+    c21 = -1.7111e-6 
+    c22 =  2.5986e-8 
+    c23 = -2.5353e-10 
+    c24 =  1.0415e-12 
+    c30 = -9.7729e-9 
+    c31 =  3.8513e-10 
+    c32 = -2.3654e-12 
+    d00 =  1.727e-3 
+    d10 = -7.9836e-6 
+
+; calculate terms
+
+    a0   = (((a04*t + a03)*t + a02)*t + a01)*t + a00 
+    a1   = (((a14*t + a13)*t + a12)*t + a11)*t + a10 
+    a2   = ((a23*t + a22)*t + a21)*t + a20 
+    a3   = (a32*t + a31)*t + a30 
+    a_tp = ((a3*p_bar + a2)*p_bar + a1)*p_bar + a0 
+
+    b_tp = b00 + b01*t + (b10 + b11*t)*p_bar 
+
+    c0   = ((((c05*t + c04)*t + c03)*t + c02)*t + c01)*t + c00 
+    c1   = (((c14*t + c13)*t + c12)*t + c11)*t + c10 
+    c2   = (((c24*t + c23)*t + c22)*t + c21)*t + c20 
+    c3   = (c32*t + c31)*t + c30 
+    c_tp = ((c3*p_bar + c2)*p_bar + c1)*p_bar + c0 
+    d_tp = d10*p_bar + d00 
+
+; calculate sound speed
+
+    vsnd = c_tp + (a_tp + b_tp * sr + d_tp*s)*s 
+
+; return meta data
+
+    vsnd@long_name = "speed of sound"
+    vsnd@units     = "m/s"
+    vsnd@info      = "UNESCO 1995"
+    vsnd@NCL_tag   = "vsnd_un95_ocn"   
+    copy_VarCoords(t, vsnd)
+
+    return(vsnd)
+end
+;--------------------------------------------------------------------
+undef("vsnd_teos10_ocn")
+function vsnd_teos10_ocn(sabs:numeric, tcon:numeric, p:numeric)
+;
+; Thermodynamic Equation Of Seawater: TEOS
+;---------------------------------------------------
+;
+; Matlab ==> NCL
+;
+; Vsnd_stp2.m                                      by:  Edward T Peltzer, MBARI
+;                                                  revised:  2015 Sep 01.
+;
+; CALCULATE SPEED OF SOUND IN SEAWATER AS A FUNCTION OF S, T & P USING A
+;   MODIFIED VERSION OF THE VAN 'T HOFF EQUATION 
+;
+; Note: short length coefficients used as fit by Peltzer & Ryan.
+;
+; Source: Coefficients for van 't Hoff equation fit to a data matrix calculated
+;         using the TEOS-10 exact sound speed equation for seawater.
+;
+; Input:    Sabs = Absolute Salinity (g/kg; TEOS-10). Mass fraction of salt in seawater
+;                  NOTE: This is *not* Practical Salinity. 
+;           Tcon = Conservative Temperature (deg C).
+;           P    = Pressure in decibars.
+;
+; Output:   Speed of sound in seawater (m/sec).
+;
+;             Vsnd = Vsnd_stp2(S,T,P).
+;
+; CHECKVALUE
+;
+;    Vsnd = 1742.9655 M/S  @  S=40, T=40 DEG C, P=10000 DBAR.
+;    function Vsnd = Vsnd_stp2(Sabs,Tcon,P)
+;
+local ds, kit, p_bar, lnv_35, v_35, dv, vsnd \ 
+    , a1,a2,a3,a4, b1,b2,b3,b4, c1,c2,c3,c4, d1,d2,d3,d4
+begin
+
+  if (.not.(isconform(sabs,tcon) .and. isconform(sabs,p))) then
+      print("vsnd_teos10_ocn: input variables do not conform")
+      exit
+  end if
+
+; convert data and assign coefficient vectors
+
+  ds    = sabs - 35 
+  kit   = 1000/(273.15 + tcon) 
+  p_bar = p/10 
+  
+  b1 = (/ 2.3676685e-010, -1.7489081e-007, -5.6836835e-005, -3.3613390e-002/) 
+  b2 = (/-2.5409141e-009,  2.0031876e-006,  5.5757702e-004,  1.9372435e-001/) 
+  b3 = (/ 9.0595990e-009, -7.5435037e-006, -1.8085366e-003, -3.0405017e-001/) 
+  b4 = (/-1.0736773e-008,  9.3618674e-006,  2.0480088e-003,  7.4444951e+000/) 
+  
+  d1 = (/-3.412150e-002, -1.996346e+000, -3.513232e-001/) 
+  d2 = (/ 3.599008e-001,  2.059914e+001,  3.650845e+000/) 
+  d3 = (/-1.261619e+000, -7.016336e+001, -1.263016e+001/) 
+  d4 = (/ 1.470445e+000,  8.008714e+001,  1.455114e+001/) 
+
+; calculate v_35 for t array at s = 35 & p = p_bar(j)
+
+  a1 = ((b1(0)*p_bar + b1(1))*p_bar + b1(2))*p_bar + b1(3) 
+  a2 = ((b2(0)*p_bar + b2(1))*p_bar + b2(2))*p_bar + b2(3) 
+  a3 = ((b3(0)*p_bar + b3(1))*p_bar + b3(2))*p_bar + b3(3) 
+  a4 = ((b4(0)*p_bar + b4(1))*p_bar + b4(2))*p_bar + b4(3) 
+  lnv_35 = ((a1*kit + a2)*kit + a3)*kit + a4 
+
+  v_35 = exp(lnv_35) 
+
+; calculate dv & v_s where dv = f(ds)
+
+  c1 = (d1(0)*ds + d1(1))*ds + d1(2) 
+  c2 = (d2(0)*ds + d2(1))*ds + d2(2) 
+  c3 = (d3(0)*ds + d3(1))*ds + d3(2) 
+  c4 = (d4(0)*ds + d4(1))*ds + d4(2) 
+  dv = ((c1*kit + c2)*kit + c3)*kit + c4 
+    
+  vsnd = v_35 + dv 
+
+; return meta data
+
+  vsnd@long_name = "speed of sound"
+  vsnd@units     = "m/s"
+  vsnd@info      = "TEOS 10"
+  vsnd@NCL_tag   = "vsnd_teos10_ocn"   
+  copy_VarCoords(tcon, vsnd)
+
+  return(vsnd)
+end
+;--------------------------------------
+undef("densatp_ocn")
+function densatp_ocn(S, T, P)
+; 
+;--- Direct translation
+; densatp.m                                      by:  Edward T Peltzer, MBARI
+;                                                     revised:  29 Jan 98.
+;
+; CALCULATE THE DENSITY OF SEAWATER AT A GIVEN S, T and P.
+; Equation of State is from Millero & Poisson (1981) DSR V28: 625-629.
+;
+; INPUT:       	Salinity (S) in g/kg or pss.
+;		Temperature (T) in degrees C.
+;		Pressure (P) in decibar.
+;
+; OUTPUT:	Density [rhp] in g/cc:
+;
+;			rhp = densatp(S,T,P).
+; function [rhp]=densatp(S,T,P)
+
+local R0,R1,R2,R3,R4,R5, A0,A1,A2,A3,A4, B0,B1,B2, C,  D0,D1,D2,D3,D4     \
+    , E0,E1,E2,E3, F0,F1,F2, G0,G1,G2,G3, H0,H1,H2,H3, I0,I1,I2, J0,J1,J2 \
+    , H, J, K, K1,K2,K3,K4,K5 \
+    , Pc, RHP, C, SR, RHO0, A, B, RHO
+begin
+
+  if (.not.(isconform(S,T) .and. isconform(S,P))) then
+      print("densatp_ocn: input variables do not conform")
+      exit
+  end if
+
+; DEFINE CONSTANTS FOR EQUATION OF STATE
+
+  R0 = 9.99842594E2 
+  R1 = 6.793952E-2 
+  R2 =-9.095290E-3 
+  R3 = 1.001685E-4 
+  R4 =-1.120083E-6 
+  R5 = 6.536332E-9 
+
+  A0 = 8.24493E-1 
+  A1 =-4.0899E-3 
+  A2 = 7.6438E-5 
+  A3 =-8.2467E-7 
+  A4 = 5.3875E-9 
+
+  B0 =-5.72466E-3 
+  B1 = 1.0227E-4 
+  B2 =-1.6546E-6 
+
+  C = 4.8314E-4 
+
+; CALCULATE RHO
+
+  SR = sqrt(S) 
+
+  RHO0 = R0+T*(R1+T*(R2+T*(R3+T*(R4+T*R5)))) 
+  A    = A0+T*(A1+T*(A2+T*(A3+T*A4))) 
+  B    = B0+T*(B1+T*B2) 
+  RHO  = RHO0+S*(A+B*SR+C*S) 
+
+; DEFINE CONSTANTS FOR SECANT BULK MODULUS
+
+  D0 = 1.965221E+4 
+  D1 = 1.484206E+2 
+  D2 =-2.327105E+0 
+  D3 = 1.360477E-2 
+  D4 =-5.155288E-5 
+
+  E0 = 5.46746E+1 
+  E1 =-6.03459E-1 
+  E2 = 1.09987E-2 
+  E3 =-6.1670E-5 
+
+  F0 = 7.944E-2 
+  F1 = 1.6483E-2 
+  F2 =-5.3009E-4 
+
+  G0 = 3.239908E+0 
+  G1 = 1.43713E-3 
+  G2 = 1.16092E-4 
+  G3 =-5.77905E-7 
+
+  H0 = 2.2838E-3 
+  H1 =-1.0981E-5 
+  H2 =-1.6078E-6 
+  H3 = 1.91075E-4 
+
+  I0 = 8.50935E-5 
+  I1 =-6.12293E-6 
+  I2 = 5.2787E-8 
+
+  J0 =-9.9348E-7 
+  J1 = 2.0816E-8 
+  J2 = 9.1697E-10 
+
+; CORRECT P IN DECI-BARS TO BARS
+
+  Pc = P/10. 
+
+; CALCULATE K
+
+  H  = H0+T*(H1+T*H2)+H3*SR 
+  J  = J0+T*(J1+T*J2) 
+
+  K1 = D0+T*(D1+T*(D2+T*(D3+T*D4))) 
+  K2 = E0+T*(E1+T*(E2+T*E3)) 
+  K3 = F0+T*(F1+T*F2) 
+  K4 = G0+T*(G1+T*(G2+T*G3))+S*H 
+  K5 = I0+T*(I1+T*I2)+S*J 
+
+  K  = K1+S*(K2+SR*K3)+Pc*(K4+Pc*K5) 
+
+; CORRECT FOR PRESSURE
+
+  RHP = RHO*(1/(1-Pc/K)) 
+
+; CONVERT KG/M3 TO g/cc
+
+  RHP = RHP / 1000 
+
+  RHP@long_name = "density" 
+  RHP@units     = "g/cc"
+  RHP@info      = "corrected for pressure"
+  RHP@NCL_tag   = "densatp_ocn"
+    
+  return(RHP)
+end
+;----------------------------------------------------------------
+undef("aou_ocn")
+function aou_ocn(S:numeric, T:numeric, O2:numeric)
+;
+;--- Direct translation
+; aou.m                                            by:  Edward T Peltzer, MBARI
+;                                                  revised:  2007 Apr 26.
+;
+; CALCULATE OXYGEN CONCENTRATION AT SATURATION
+;
+; Source:  The solubility of nitrogen, oxygen and argon in water and
+;         seawater - Weiss (1970) Deep Sea Research V17(4): 721-735.
+;
+; Molar volume of oxygen at STP obtained from NIST website on the
+;          thermophysical properties of fluid systems:
+;
+;          http://webbook.nist.gov/chemistry/fluid/
+;
+; CALCULATE AOU BY DIFFERENCE:
+;
+;         AOU (umol/kg) = sat O2 (umol/kg) - obs o2 (umol/kg).
+;
+; Input:       S = Salinity (pss-78)
+;              T = Potential Temp (deg C)
+;              O2 = Meas'd Oxygen Conc (umol/kg)
+;
+; Output:      Apparant Oxygen Utilization (umol/kg).
+;
+;                        AOU = aou(S,T,O2).
+;
+; MATLAB: function [AOU]=aou(S,T,O2)
+;
+local T1, OSAT
+begin
+
+  if (.not.(isconform(S,T) .and. isconform(S,O2))) then
+      print("aou_ocn: input variables do not conform")
+      exit
+  end if
+
+; DEFINE CONSTANTS, ETC FOR SATURATION CALCULATION
+; The constants -177.7888, etc., are used for units of ml O2/kg.
+
+  T1 = (T + 273.15) / 100
+
+  OSAT = -177.7888 + 255.5907/T1 + 146.4813*log(T1) - 22.2040*T1
+  OSAT = OSAT + S*(-0.037362 + T1*(0.016504 - 0.0020564*T1))
+  OSAT = exp(OSAT)
+
+; CONVERT FROM ML/KG TO UM/KG
+
+  OSAT = OSAT*1000/22.392
+
+  OSAT@long_name = "Oxygen Concentration at Saturation"
+  OSAT@units     = "umol/kg"
+  OSAT@NCL_tag   = "aou_ocn"
+  copy_VarCoords(T, OSAT)
+
+  return(OSAT)
+end
+
 
