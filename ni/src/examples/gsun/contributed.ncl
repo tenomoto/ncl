@@ -23142,5 +23142,96 @@ begin
 
   return(OSAT)
 end
+;==========================================================
+undef("heat_storage")
+function heat_storage(t, rho, dz, opt)
+;###################################
+; Not fully tested: Use with caution
+;###################################
+;
+; https://en.wikipedia.org/wiki/Ocean_heat_content
+;
+; Ocean heat storage is a non-linear quantity.
+; Hence, it should be calculated using high-frequency data.
+; However, if 'rho' is considered invariant over 'time', then
+;          heat_storage(t(time))
+;
+; The density of seawater is about 1025 kg/m^3 
+; The specific heat is about 3850 J/(kg C) 
+;
+; t   - temperatue (C)        ; (time,lev,nlat,nlon)
+; rho - density (kg/m3)       ; same shape as 't'
+; dz  - layer thickness (m)   ; dz[lev] or (time,lev,nlat,nlon)
+; opt - set to False ... not used
+;
+local dimt, rankt, dimr, rankr, dimz, rankz  \
+    , ocnRTZ, zsfc, zdep,  dz, cp, ocnHeat
+begin
+
+;---Dimension information: used for error chacking
+ 
+  dimt  = dimsizes(t)
+  rankt = dimsizes(dimt)
+  dimr  = dimsizes(rho)
+  rankr = dimsizes(dimr)
+  dimz  = dimsizes(dz)
+  rankz = dimsizes(dimz)
+
+ if (rankt.ne.rankr) then
+     print("heat_storage: t and rho must be same shape: rankt="+rankt+" rankr="+rankr)
+     exit
+ end if
+ if (.not.all(dimt.eq.dimr)) then
+     print("heat_storage: dimension sizes of t and rho are different:")
+     print("dimt="+dimt+"  dimr="+dimr)
+     exit
+ end if
+ if (.not.(rankz.eq.1 .or. (rankz.eq.rankt .and. all(dimt.eq.dimz)))) then
+     print("heat_storage: rankz must be 1 or 4: rankz="+rankz)           
+     exit
+ end if
+
+;---Layer heat content
+
+  cp       = 3850.0             ; specific heat of seawater
+  cp@units = "J/(kg-C)"         
+
+  if (rankz.eq.rankt) then
+      ocnRTZ   = cp*rho*t*dz               ; rho/t/dz are all rank=4
+  elseif (rankz.eq.1) then
+      ocnRTZ   = cp*rho*t*conform(t,dz,1)  ; expand dz[*] to dz[*][*][*][*]
+  end if
+                                ;     cp       rho    t   dz
+  ocnRTZ@units     = "J/m2"     ; [J/(kg-C)] [kg/m3] [C] [m]==> J/m2
+  ocnRTZ@long_name = "Layer Ocean Heat Content"
+  copy_VarCoords(t,ocnRTZ)
+  printVarSummary(ocnRTZ)        ; [time] x [z_t] x [nlat] x [nlon]
+  printMinMax(ocnRTZ,0)
+  print("---")
+
+;---Vertically integrated [sum] heat content layers at each grid point
+
+  ocnHeat = dim_sum_n_Wrap(ocnRTZ,1)    ; '1' is the dimension for  depth [z_t]
+  ocnHeat@long_name = "Ocean Heat Content"
+
+  return(ocnHeat)
+;;return([/ocnHeat,ocnRTZ/])      ; return list variable containing 2 variables
+;
+;---Total Heat Storage (area weighting)
+
+;;lat2d  = f->TLAT                           ; (nlat,mlon)
+;;rad    = 4*atan(1.0)/180.
+;;clat2d = cos(lat2d*rad)                    ; cosine weighting
+;;HS     = hs*conform(hs,clat2d,(/1,2/))     ; (time,nlat,nlon)
+;;HS    := dim_sum_n(HS,(/1,2/))             ; (time)    [ := is reassignment]
+;;HS@long_name = "Total Heat Storage"
+;;HS@units     = hs@units
+;;copy_VarCoords(hs(:,0,0),HS)
+;;printVarSummary(HS)          ; (time)
+;;printMinMax(HS,0)
+;;print("----------------------")
+;;return([/ocnHeat,ocnRTZ,HS/])   ; return list variable containing 3 variables
+
+end
 
 
