@@ -511,7 +511,7 @@ local latN, latS, lonL, lonR, spd, fCrit, tim_taper        \
     , nWaveType, nPlanetaryWave, nEquivDepth, Apzwn, Afreq \
     , asym, sym, x1, x2, y1, y2, y3, y4, wks, plot         \
     , psumb, psumsym_nolog, psumanti_nolog,  tt, smthlen   \
-    , i, pt8cpd, spec, nCn, nExtra
+    , i, pt8cpd, spec, nCn, nExtra, zero_eps
 
   begin
 
@@ -834,9 +834,13 @@ local latN, latS, lonL, lonR, spd, fCrit, tim_taper        \
 ;-------------------------------------------------------------------
 ; Log10 scaling 
 ;-------------------------------------------------------------------
+  zero_eps       = 1e-10    ; arbitrary
 
   psumanti_nolog = psumanti
   psumsym_nolog  = psumsym
+
+  psumanti       = where(psumanti.gt.eps, psumanti, psumanti@_FillValue) ; Karin Meier-Fleischer
+  psumsym        = where(psumsym .gt.eps, psumsym , psumsym@_FillValue )
 
   psumanti       = log10(psumanti)
   psumsym        = log10(psumsym)
