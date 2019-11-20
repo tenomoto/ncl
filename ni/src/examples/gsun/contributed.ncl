@@ -22389,6 +22389,131 @@ begin
 
   return(beta)
 end
+;================================
+undef("skill_metrics")
+function skill_metrics(zm[*][*]:numeric, zr[*][*]:numeric, wlat[*]:numeric, opt[1]:logical)
+;
+; Williamson, D. (1995):  Skill Scores from the AMIP Simulations 
+;                         WMO report series, WMO/TD‐No. 732. 
+;
+; NMSE (Normalised Mean Square Error) - Estimate of the overall deviations 
+;       between predicted and measured values. 
+;
+; Nomenclature:
+; zr   - reference climatology ('truth'; Observed Climatology;  AMIP)
+; zm   - model     climatology ('predicted' / 'forecast')
+; wlat - weight in lat [ eg: cos(lat), gaussian(lat) ]
+; opt  = set to False for production; True mean debug prints
+;
+; This uses **area averages**  and deviations from  area averages 
+;
+local zmrCor, zmrRMSE, zmAvg, zrAvg, zmrDif, zmAnom, zrAnom, zmVar, zrVar \
+    , znum, zden, NMSE, ubias, cbias, xCor, pi, svr, arg, mielke
+begin
+                              
+;---Basic quantities
+
+  zmrCor = pattern_cor (zm, zr, wlat, 0)       ; centered pattern correlation [1]
+  zmrRMSE= wgt_arearmse(zm, zr, wlat, 1.0, 0)  ; Root Mean Square Error [1]
+  zmrCor@long_name  = "Pattern Correlation: Centered"
+  zmrRMSE@long_name = "Root Mean Square Error" 
+
+  zmAvg  = wgt_areaave (zm, wlat, 1.0, 1)      ; model areal mean     [1]
+  zrAvg  = wgt_areaave (zr, wlat, 1.0, 1)      ; reference areal mean [1]
+  zmAvg@long_name = "Model Mean"
+  zrAvg@long_name = "Reference Mean"
+
+  zmrDif = zm-zr                               ; grid point differences:     [*][*]
+  zmAnom = zm-zmAvg                            ; model diff from areal mean: [*][*]
+  zrAnom = zr-zrAvg                            ; ref diff from areal mean:   [*][*]
+  zmrDif@long_name = "[Model-Reference]: Grid Points"
+  zmAnom@long_name = "Model: Anomalies from Areal Mean" 
+  zrAnom@long_name = "Reference: Anomalies from Areal Mean" 
+
+  zmVar  = wgt_areaave(zmAnom^2, wlat, 1.0, 1) ; [1]
+  zrVar  = wgt_areaave(zrAnom^2, wlat, 1.0, 1) ; [1]
+  zmVar@long_name = "Model Variance about Areal Mean"
+  zrVar@long_name = "Reference Variance about Areal Mean"
+
+;---Numerator and Denominator for NMSE
+
+  znum   = wgt_areaave(zmrDif^2, wlat, 1.0, 1) ; diff^2 area avg (numerator)   [1]
+  zden   = zrVar
+
+  if (zden.eq.0.0)then                   ; avoid division by zero
+      if (.not.isatt(zden,"FillValue")) then
+          zden@_FillValue = 1e10
+      end if
+      zden = where(zden.eq.0.0, zden@_FillValue, zden)
+  end if
+
+  NMSE   = znum/zden                           ; Normalized Mean Square Error [1]
+  NMSE@long_name = "Normalized Mean Square Error"
+
+;---Partition into three parts 
+
+  sm     = sqrt(zmVar)  ; Standard Dev.        ; use same names as referene
+  sr     = sqrt(zrVar)
+  
+;---1st term is a non-dimensional measure of the unconditional bias in the model 
+;---and vanishes only for a model with no mean error.
+
+  ubias  = ((zmAvg-zrAvg)/sr)^2    ; [1]
+  ubias@long_name = "Unconditional Bias"
+
+;---2nd term Includes both amplitude and phase errors. It is conditional in the 
+;---sense of dependency on the atmospheric state so that, for example, in the 
+;---case of no phase errors or perfect correlations (zmCor = 1), where the 
+;---model is low, the model is lower, and where the atmosphere is high, 
+;---the model is higher. 
+;---Isla Simpson: It reflects a difference in the amplitude of the 
+;---              spatial pattern and the phase error (P) which reflects a 
+;---              difference in the structure of the spatial variations.
+
+  cbias  = (zmrCor-(sm/sr))^2      ; [1]
+  cbias@long_name = "Conditional Bias"
+
+;---3rd term measures the lack of correlation, and is due to phase errors.
+
+  xCor   = 1 - zmrCor^2            ; [1]
+  xCor@long_name = "Lack of Correlation"
+
+;---Scaled Variance Ratio (SVR)
+;---Indicates whether the model variance is greater than or less than that 
+;---of the reference, and thus, whether it might be affecting the conditional bias.
+
+  svr    = NMSE*(sm/sr)^2       ; [1]
+  svr@long_name = "SVR: Scaled Variance Ratio"
+
+
+;---Arcsin–Mielke measure. In essence, it is the mean-square error (mse), 
+;---non-dimensionalized by the spatial variance of the field. 
+
+  pi     = get_pi(typeof(zm))
+  arg    = 1.0-(zmrRMSE/(zmVar+zrVar+(zmAvg-zrAvg)^2))
+  mielke = (2/pi)*asin(arg)*1000
+  mielke@long_name = "Arcsin–Mielke Measure"
+
+  if (opt) then 
+      print("skill_metrics: zmrCo="+zmrCor+"   zmrRMSE="+zmrRMSE)
+      print("skill_metrics: zmAvg= "+zmAvg+"  zrAvg="+zrAvg+"  (zmAvg-zrAvg)="+(zmAvg-zrAvg))
+      print("skill_metrics: zmVar="+zmVar+"  zrVar="+zrVar)
+      print("skill_metrics: sm="+sm+"  sr="+sr)
+      print("skill_metrics: znum="+znum+"  zden="+zden)
+      print("skill_metrics: ubias="+ubias+"  cbias="+cbias+"  xCor="+xCor+"  svr="+svr)
+      print("skill_metrics: NMSE="+NMSE+" [ubias+cbias+xCor]="+(ubias+cbias+xCor))
+      print("skill_metrics:  arg="+arg+"  mielke="+mielke)
+  end if
+
+;---Return
+
+  skill   = (/zmrCor, zmrRMSE, NMSE, ubias, cbias, xCor, svr, mielke/)
+  skill!0 = "skill_elements"
+  skill@long_name = "skill information"
+  skill@elements  = "patCor, RMSE, NMSE, ubias, cbias, xCor, svr, mielke"
+
+  return( skill ) 
+end
 ;==============================================================
 ;           OCEAN:    References and Code Sources
 ;==============================================================
