@@ -22390,6 +22390,25 @@ begin
   return(beta)
 end
 ;================================
+undef("list_element_type")
+function list_element_type(x:list)
+; create (:) string array containing the 'type' of each list element 
+; Example:
+;      LIST = [/ "string", "more string", 123, 99.9, True/]
+;      element_type = list_element_type(LIST)
+;      print(element_type)
+begin
+  nx = ListCount(x)
+  list_type = new(nx,"string","No_FillValue")
+  do n=0,nx-1
+     list_type(n) = typeof(x[n])
+  end do
+  list_type@long_name = "type of each variable in list"
+  list_type!0 = "element"
+  return(list_type)
+end
+
+;================================
 undef("skill_metrics")
 function skill_metrics(zm[*][*]:numeric, zr[*][*]:numeric, wlat[*]:numeric, opt[1]:logical)
 ;
